@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader, MessageSquare, X, Menu, Plus, Trash2, Edit3, Search, AlertCircle } from 'lucide-react';
+import { Send, Bot, User, Loader, MessageSquare, X, Menu, Plus, Trash2, Edit3, Search } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { AiService } from '../../services/aiService';
 import { AuthService } from '../../services/authService';
@@ -36,7 +36,6 @@ const ChatbotPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
-  const [isUserInitialized, setIsUserInitialized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -47,28 +46,25 @@ const ChatbotPage: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Initialize user and conversations
+  // Initialize user and load all conversations
   useEffect(() => {
     const initializeUser = async () => {
       try {
         const user = await AuthService.getCurrentUser();
         setCurrentUserId(user?.id || null);
-        setIsUserInitialized(true);
-        
-        if (user?.id) {
-          const conversations = await AiService.getUserConversations(user.id);
-          setUserConversations(conversations.map(conv => ({
-            id: conv.id,
-            title: conv.title,
-            lastMessage: conv.messages[conv.messages.length - 1]?.content || '',
-            timestamp: conv.updatedAt,
-            messageCount: conv.messages.length
-          })));
-        }
+
+        // Load all conversations regardless of authentication
+        const conversations = await AiService.getUserConversations();
+        setUserConversations(conversations.map(conv => ({
+          id: conv.id,
+          title: conv.title,
+          lastMessage: conv.messages[conv.messages.length - 1]?.content || '',
+          timestamp: conv.updatedAt,
+          messageCount: conv.messages.length
+        })));
       } catch (error) {
         console.error('Error initializing user:', error);
         setCurrentUserId(null);
-        setIsUserInitialized(true);
       }
     };
 
@@ -109,26 +105,24 @@ const ChatbotPage: React.FC = () => {
 
     try {
       const response = await AiService.processQuery(
-        queryText, 
-        currentConversationId, 
-        currentUserId || undefined, // Properly handle null case
+        queryText,
+        currentConversationId,
+        currentUserId || undefined,
         language
       );
-      
+
       // Update conversation ID if this is a new conversation
       if (!currentConversationId && response.conversationId) {
         setCurrentConversationId(response.conversationId);
-        // Refresh conversations list only if user is logged in
-        if (currentUserId) {
-          const conversations = await AiService.getUserConversations(currentUserId);
-          setUserConversations(conversations.map(conv => ({
-            id: conv.id,
-            title: conv.title,
-            lastMessage: conv.messages[conv.messages.length - 1]?.content || '',
-            timestamp: conv.updatedAt,
-            messageCount: conv.messages.length
-          })));
-        }
+        // Refresh conversations list for all users
+        const conversations = await AiService.getUserConversations();
+        setUserConversations(conversations.map(conv => ({
+          id: conv.id,
+          title: conv.title,
+          lastMessage: conv.messages[conv.messages.length - 1]?.content || '',
+          timestamp: conv.updatedAt,
+          messageCount: conv.messages.length
+        })));
       }
       
       const aiMessage: Message = {
@@ -257,27 +251,6 @@ const ChatbotPage: React.FC = () => {
     return 'text-red-500';
   };
 
-  // UI feedback component for unauthenticated users
-  const UnauthenticatedAlert = () => (
-    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-      <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3">
-        <div className="flex items-start space-x-2">
-          <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-              {language === 'hi' ? 'गेस्ट मोड' : 'Guest Mode'}
-            </p>
-            <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-              {language === 'hi' 
-                ? 'आपकी बातचीत सेव नहीं होगी। लॉग इन करें।' 
-                : 'Your conversations will not be saved. Please log in.'
-              }
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="h-screen flex bg-gray-50 dark:bg-gray-900">
@@ -294,11 +267,8 @@ const ChatbotPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Unauthenticated User Alert */}
-        {isUserInitialized && !currentUserId && <UnauthenticatedAlert />}
-
-        {/* Search - Only show if user is authenticated */}
-        {currentUserId && (
+        {/* Search */}
+        {
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -311,26 +281,11 @@ const ChatbotPage: React.FC = () => {
               />
             </div>
           </div>
-        )}
+        }
 
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto p-4">
-          {!currentUserId ? (
-            // Show message for unauthenticated users
-            <div className="text-center py-8">
-              <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 dark:text-gray-400 text-sm mb-2">
-                {language === 'hi' ? 'लॉग इन करें' : 'Please log in'}
-              </p>
-              <p className="text-gray-400 dark:text-gray-500 text-xs">
-                {language === 'hi' 
-                  ? 'अपनी बातचीत सेव करने के लिए' 
-                  : 'to save your conversations'
-                }
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
+          <div className="space-y-2">
               {filteredConversations.length === 0 ? (
                 <div className="text-center py-8">
                   <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -411,7 +366,6 @@ const ChatbotPage: React.FC = () => {
                 ))
               )}
             </div>
-          )}
         </div>
       </div>
 
@@ -437,11 +391,6 @@ const ChatbotPage: React.FC = () => {
                   </h1>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {language === 'hi' ? 'ऑनलाइन • <20 सेकंड' : 'Online • <20 seconds'}
-                    {isUserInitialized && !currentUserId && (
-                      <span className="ml-2">
-                        • {language === 'hi' ? 'गेस्ट मोड' : 'Guest mode'}
-                      </span>
-                    )}
                   </p>
                 </div>
               </div>
@@ -573,14 +522,6 @@ const ChatbotPage: React.FC = () => {
                 <span>📊</span>
                 <span>{language === 'hi' ? 'लाइव डेटा से' : 'With live data'}</span>
               </span>
-              {isUserInitialized && !currentUserId && (
-                <>
-                  <span>•</span>
-                  <span className="text-yellow-600 dark:text-yellow-400">
-                    {language === 'hi' ? 'बातचीत सेव नहीं होगी' : 'Chat not saved'}
-                  </span>
-                </>
-              )}
             </div>
           </div>
         </div>

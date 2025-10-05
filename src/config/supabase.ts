@@ -66,7 +66,7 @@ export interface AiLog {
   response_time: number | null;
   user_feedback: number | null;
   created_at: string;
-  user_id: string | null;
+  conversation_id: string | null;
   intelligence_level: string | null;
 }
 

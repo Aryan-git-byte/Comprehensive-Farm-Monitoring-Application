@@ -26,7 +26,6 @@ interface ConversationMessage {
 // Conversation session structure
 interface ConversationSession {
   id: string;
-  userId?: string | null; // Updated to allow null
   title: string;
   messages: ConversationMessage[];
   createdAt: Date;
@@ -94,17 +93,17 @@ export class AiService {
 
   // MAIN PROCESSING METHOD WITH CONTEXT
   static async processQuery(
-    query: string, 
+    query: string,
     conversationId?: string,
-    userId?: string | null, // Updated to explicitly allow null
+    userId?: string | null,
     language: string = 'en'
   ): Promise<AiResponse> {
     const startTime = performance.now();
-    
+
     // 1. Get or create conversation session
-    const session = conversationId 
+    const session = conversationId
       ? await this.getConversationSession(conversationId)
-      : await this.createNewConversation(userId, language);
+      : await this.createNewConversation(language);
     
     // 2. Analyze query with conversation context
     const context = this.analyzeQueryWithContext(query, language, session);
@@ -150,10 +149,8 @@ export class AiService {
     // 9. Update session context based on conversation
     await this.updateSessionContext(session, query, parsedResponse);
     
-    // 10. Save conversation to database (only if user exists)
-    if (session.userId) {
-      await this.saveConversation(session);
-    }
+    // 10. Save conversation to database (always save for all users)
+    await this.saveConversation(session);
     
     // 11. Format and return response
     const response: AiResponse = {
@@ -165,19 +162,18 @@ export class AiService {
       intelligence_level: 'advanced'
     };
 
-    // Log the query and response to Supabase (with user_id as null if not logged in)
-    await this.logQuery(query, response, session.id, session.userId);
+    // Log the query and response to Supabase
+    await this.logQuery(query, response, session.id);
     
     return response;
   }
 
   // CONVERSATION SESSION MANAGEMENT
-  private static async createNewConversation(userId?: string | null, language: string = 'en'): Promise<ConversationSession> {
+  private static async createNewConversation(language: string = 'en'): Promise<ConversationSession> {
     const sessionId = `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const session: ConversationSession = {
       id: sessionId,
-      userId, // Can be null
       title: 'New Farm Consultation',
       messages: [],
       createdAt: new Date(),
@@ -237,7 +233,6 @@ export class AiService {
 
     const session: ConversationSession = {
       id: data.id,
-      userId: data.user_id, // Can be null
       title: data.title,
       messages: messages || [],
       createdAt: new Date(data.created_at),
@@ -663,7 +658,6 @@ FORMAT YOUR RESPONSE AS:
         .from('conversations')
         .upsert({
           id: session.id,
-          user_id: session.userId, // Can be null
           title: session.title,
           context: session.context,
           created_at: session.createdAt.toISOString(),
@@ -703,10 +697,9 @@ FORMAT YOUR RESPONSE AS:
 
   // ENHANCED LOGGING WITH CONVERSATION CONTEXT
   private static async logQuery(
-    query: string, 
-    response: AiResponse, 
-    conversationId: string, 
-    userId?: string | null // Updated to allow null
+    query: string,
+    response: AiResponse,
+    conversationId: string
   ): Promise<void> {
     try {
       const logEntry: Omit<AiLog, 'id' | 'created_at' | 'timestamp'> = {
@@ -720,8 +713,7 @@ FORMAT YOUR RESPONSE AS:
         status: 'success',
         model_used: 'gemini-1.5-flash-latest',
         user_feedback: null,
-        conversation_id: conversationId, // Add conversation reference
-        user_id: userId // Include user_id (can be null)
+        conversation_id: conversationId
       };
 
       const { error } = await supabase.from('ai_log').insert([logEntry]);
@@ -816,31 +808,20 @@ FORMAT YOUR RESPONSE AS:
   }
 
   /**
-   * Get all conversations for a user (handles null user ID)
+   * Get all conversations (public, shared across all users)
    */
-  static async getUserConversations(userId: string | null, limit: number = 20): Promise<ConversationSession[]> {
+  static async getUserConversations(userId?: string | null, limit: number = 20): Promise<ConversationSession[]> {
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('conversations')
         .select('*')
         .order('updated_at', { ascending: false })
         .limit(limit);
 
-      // If userId is null, get conversations where user_id IS NULL
-      // If userId is provided, get conversations for that specific user
-      if (userId === null) {
-        query = query.is('user_id', null);
-      } else {
-        query = query.eq('user_id', userId);
-      }
-
-      const { data, error } = await query;
-
       if (error) throw error;
 
       return data.map(conv => ({
         id: conv.id,
-        userId: conv.user_id, // Can be null
         title: conv.title,
         messages: [], // Messages loaded separately when needed
         createdAt: new Date(conv.created_at),
@@ -976,35 +957,25 @@ FORMAT YOUR RESPONSE AS:
   }
 
   /**
-   * Search conversations by query (handles null user ID)
+   * Search conversations by query (public search across all conversations)
    */
   static async searchConversations(
-    userId: string | null, 
-    searchQuery: string, 
+    userId: string | null,
+    searchQuery: string,
     limit: number = 10
   ): Promise<ConversationSession[]> {
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('conversations')
         .select('*')
         .or(`title.ilike.%${searchQuery}%,context->cropType.ilike.%${searchQuery}%`)
         .order('updated_at', { ascending: false })
         .limit(limit);
 
-      // Handle null user ID
-      if (userId === null) {
-        query = query.is('user_id', null);
-      } else {
-        query = query.eq('user_id', userId);
-      }
-
-      const { data, error } = await query;
-
       if (error) throw error;
 
       return data.map(conv => ({
         id: conv.id,
-        userId: conv.user_id, // Can be null
         title: conv.title,
         messages: [],
         createdAt: new Date(conv.created_at),
