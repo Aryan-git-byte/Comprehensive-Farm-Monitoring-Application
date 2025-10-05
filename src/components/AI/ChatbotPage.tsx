@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader, MessageSquare, X, Menu, Plus, Trash2, Edit3, Search } from 'lucide-react';
+import { Send, Bot, User, Loader, MessageSquare, X, Menu, Plus, Trash2, CreditCard as Edit3, Search } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { AiService } from '../../services/aiService';
 import { AuthService } from '../../services/authService';
