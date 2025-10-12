@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader, MessageSquare, X, Menu, Plus, Trash2, CreditCard as Edit3, Search } from 'lucide-react';
+import { Send, Bot, User, Loader, MessageSquare, Menu, Plus, Trash2, CreditCard as Edit3, Search } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { AiService } from '../../services/aiService';
 import { AuthService } from '../../services/authService';
@@ -24,7 +24,7 @@ interface Conversation {
 }
 
 const ChatbotPage: React.FC = () => {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -182,10 +182,11 @@ const ChatbotPage: React.FC = () => {
         text: msg.content,
         sender: msg.role === 'user' ? 'user' : 'ai',
         timestamp: new Date(msg.timestamp),
-        confidence: msg.metadata?.confidence,
-        responseTime: msg.metadata?.responseTime,
-        intelligence_level: msg.metadata?.intelligence_level,
-        sources: msg.metadata?.sources
+        // metadata can have various shapes depending on backend; cast to any to safely read fields
+        confidence: (msg.metadata as any)?.confidence,
+        responseTime: (msg.metadata as any)?.responseTime,
+        intelligence_level: (msg.metadata as any)?.intelligence_level,
+        sources: (msg.metadata as any)?.sources
       }));
       setMessages(formattedMessages);
     } catch (error) {
@@ -249,6 +250,29 @@ const ChatbotPage: React.FC = () => {
     if (confidence >= 0.8) return 'text-green-500';
     if (confidence >= 0.6) return 'text-yellow-500';
     return 'text-red-500';
+  };
+
+  // Format message text: render segments wrapped in **double stars** as bold.
+  const formatMessageText = (text?: string) => {
+    if (!text) return null;
+
+    // Split text into parts where **...** segments are captured
+    const parts = text.split(/(\*\*[\s\S]*?\*\*)/g);
+
+    return parts.map((part, idx) => {
+      const boldMatch = part.match(/^\*\*([\s\S]*?)\*\*$/);
+      if (boldMatch) {
+        // Render bold segment without the surrounding **
+        return (
+          <strong key={idx} className="font-semibold">
+            {boldMatch[1]}
+          </strong>
+        );
+      }
+
+      // Non-bold text: return as-is (preserve whitespace via container CSS)
+      return <React.Fragment key={idx}>{part}</React.Fragment>;
+    });
   };
 
 
@@ -431,7 +455,7 @@ const ChatbotPage: React.FC = () => {
                       ? 'bg-blue-500 text-white'
                       : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 shadow-sm'
                   }`}>
-                    <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+                    <p className="whitespace-pre-wrap leading-relaxed">{formatMessageText(message.text)}</p>
                     {message.sender === 'ai' && (
                       <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200 dark:border-gray-600 text-xs opacity-70">
                         <div className="flex items-center space-x-3">

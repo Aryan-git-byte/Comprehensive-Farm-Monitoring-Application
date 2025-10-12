@@ -2,10 +2,12 @@ import { supabase, AiLog, ProcessedSensorReading } from '../config/supabase';
 import { SensorService } from './sensorService';
 import { WeatherService, WeatherData } from './weatherService';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const OPEN_ROUTER_API_KEY = import.meta.env.VITE_OPEN_ROUTER_API_KEY;
+const SITE_URL = import.meta.env.VITE_SITE_URL || 'https://yourfarm.app';
+const SITE_NAME = import.meta.env.VITE_SITE_NAME || 'Smart Farm Assistant';
 
-if (!GEMINI_API_KEY) {
-  throw new Error('Gemini API key is required for AI responses');
+if (!OPEN_ROUTER_API_KEY) {
+  throw new Error('OpenRouter API key is required for AI responses');
 }
 
 // Enhanced conversation message structure
@@ -88,7 +90,7 @@ export interface AiResponse {
 
 export class AiService {
   private static conversationCache = new Map<string, ConversationSession>();
-  private static readonly MAX_CONTEXT_MESSAGES = 10; // Keep last 10 messages for context
+  private static readonly MAX_CONTEXT_MESSAGES = 10;
   private static readonly CONTEXT_RELEVANCE_THRESHOLD = 0.7;
 
   // MAIN PROCESSING METHOD WITH CONTEXT
@@ -126,10 +128,10 @@ export class AiService {
     session.messages.push(userMessage);
     
     // 5. Build comprehensive prompt with conversation history
-    const prompt = this.buildContextualPrompt(query, language, context, farmData, session);
+    const systemPrompt = this.buildSystemPrompt(language, context, farmData, session);
     
-    // 6. Get AI response
-    const aiResponse = await this.callGeminiAPI(prompt);
+    // 6. Get AI response from OpenRouter
+    const aiResponse = await this.callOpenRouterAPI(systemPrompt, query, session);
     
     // 7. Parse AI response for structured data
     const parsedResponse = this.parseAiResponse(aiResponse);
@@ -149,7 +151,7 @@ export class AiService {
     // 9. Update session context based on conversation
     await this.updateSessionContext(session, query, parsedResponse);
     
-    // 10. Save conversation to database (always save for all users)
+    // 10. Save conversation to database
     await this.saveConversation(session);
     
     // 11. Format and return response
@@ -157,7 +159,7 @@ export class AiService {
       ...parsedResponse,
       conversationId: session.id,
       confidence: 0.9,
-      sources: ['gemini_ai', 'live_sensor_data', 'live_weather_data', 'conversation_context'],
+      sources: ['llama_3.3_70b', 'live_sensor_data', 'live_weather_data', 'conversation_context'],
       responseTime: performance.now() - startTime,
       intelligence_level: 'advanced'
     };
@@ -216,7 +218,6 @@ export class AiService {
 
     if (error) {
       console.error('Error loading conversation:', error);
-      // Create new session if not found
       return this.createNewConversation();
     }
 
@@ -251,20 +252,17 @@ export class AiService {
     session: ConversationSession
   ): QueryContext {
     const lowerQuery = query.toLowerCase();
-    const recentMessages = session.messages.slice(-5); // Last 5 messages for context
+    const recentMessages = session.messages.slice(-5);
     
-    // Check if this is a follow-up question
     const followUpIndicators = ['what about', 'and also', 'but what if', 'how about', 'also', 'additionally'];
     const isFollowUp = followUpIndicators.some(indicator => lowerQuery.includes(indicator)) ||
-                      recentMessages.length > 2; // More than system + first user message
+                      recentMessages.length > 2;
 
-    // Extract previous topics from conversation
     const previousTopics = recentMessages
       .filter(msg => msg.role === 'user')
       .map(msg => this.extractTopicFromMessage(msg.content))
       .filter(Boolean);
 
-    // Determine query type with context awareness
     let type: QueryContext['type'] = 'general';
     
     if (lowerQuery.includes('water') || lowerQuery.includes('पानी') || lowerQuery.includes('irrigation') || lowerQuery.includes('सिंचाई')) {
@@ -285,10 +283,8 @@ export class AiService {
       type = 'follow_up';
     }
 
-    // Determine urgency with context
     let urgency: QueryContext['urgency'] = 'medium';
     
-    // Check for critical alerts in recent sensor data
     const hasRecentCriticalAlerts = recentMessages.some(msg => 
       msg.metadata?.sensorData?.some(sensor => sensor.status === 'critical')
     );
@@ -299,7 +295,6 @@ export class AiService {
       urgency = 'high';
     }
 
-    // Extract unresolved issues from conversation
     const unresolvedIssues = session.context.currentIssues || [];
 
     return {
@@ -321,7 +316,7 @@ export class AiService {
     };
   }
 
-  // COMPREHENSIVE DATA FETCHING (Same as before)
+  // COMPREHENSIVE DATA FETCHING
   private static async getFarmData(): Promise<FarmData> {
     const sensorData = await SensorService.getLatestReadings(10);
     
@@ -378,9 +373,8 @@ export class AiService {
     };
   }
 
-  // CONTEXTUAL PROMPT BUILDING
-  private static buildContextualPrompt(
-    query: string, 
+  // BUILD SYSTEM PROMPT
+  private static buildSystemPrompt(
     language: string, 
     context: QueryContext, 
     farmData: FarmData, 
@@ -388,16 +382,14 @@ export class AiService {
   ): string {
     const isHindi = language === 'hi';
     
-    // Base system prompt with enhanced context awareness
     const systemPrompt = isHindi 
       ? `आप एक भारतीय कृषि विशेषज्ञ हैं जो पूरी बातचीत का संदर्भ याद रखते हैं। ${context.season} के मौसम में ${context.timeContext} के समय के लिए व्यावहारिक और तकनीकी सलाह दें।`
       : `You are an Indian agricultural expert with perfect conversation memory. Provide practical and technical advice for ${context.season} season during ${context.timeContext}.`;
 
-    // Build conversation history context (last few messages)
     let conversationHistory = '';
     const recentMessages = session.messages.slice(-this.MAX_CONTEXT_MESSAGES);
     
-    if (recentMessages.length > 1) { // More than just system message
+    if (recentMessages.length > 1) {
       const historyText = recentMessages
         .filter(msg => msg.role !== 'system')
         .map(msg => `${msg.role === 'user' ? 'FARMER' : 'EXPERT'}: ${msg.content}`)
@@ -406,7 +398,6 @@ export class AiService {
       conversationHistory = `\n\nCONVERSATION HISTORY:\n${historyText}`;
     }
 
-    // Build sensor data context
     let sensorContext = '';
     if (farmData.sensorData.length > 0) {
       const sensorInfo = farmData.sensorData.map(reading => {
@@ -415,7 +406,6 @@ export class AiService {
       sensorContext = `\n\nCURRENT SENSOR READINGS:\n${sensorInfo}`;
     }
 
-    // Build weather context
     let weatherContext = '';
     if (farmData.weatherDataMap.size > 0) {
       const weatherEntries = Array.from(farmData.weatherDataMap.entries()).map(([locationKey, weather]) => {
@@ -425,7 +415,6 @@ export class AiService {
       weatherContext = `\n\nCURRENT WEATHER CONDITIONS:\n${weatherEntries.join('\n')}`;
     }
 
-    // Build farmer profile context
     let farmerContext = '';
     if (session.context) {
       const profile = [];
@@ -439,19 +428,16 @@ export class AiService {
       }
     }
 
-    // Build current issues context
     let issuesContext = '';
     if (session.context.currentIssues && session.context.currentIssues.length > 0) {
       issuesContext = `\n\nONGOING ISSUES:\n${session.context.currentIssues.join('\n')}`;
     }
 
-    // Build previous recommendations context
     let recommendationsContext = '';
     if (session.context.previousRecommendations && session.context.previousRecommendations.length > 0) {
       recommendationsContext = `\n\nPREVIOUS RECOMMENDATIONS:\n${session.context.previousRecommendations.slice(-3).join('\n')}`;
     }
 
-    // Build critical alerts context
     let alertsContext = '';
     if (farmData.criticalAlerts.length > 0) {
       const alerts = farmData.criticalAlerts.map(alert => 
@@ -460,9 +446,8 @@ export class AiService {
       alertsContext = `\n\nCRITICAL ALERTS:\n${alerts}`;
     }
 
-    const fullPrompt = `${systemPrompt}
+    return `${systemPrompt}
 
-CURRENT FARMER QUERY: ${query}
 Query Type: ${context.type}
 Urgency Level: ${context.urgency}
 Is Follow-up: ${context.conversationContext?.isFollowUp ? 'Yes' : 'No'}
@@ -486,53 +471,57 @@ FORMAT YOUR RESPONSE AS:
 📅 **Next Steps**: [What to plan for coming days/weeks]
 ❓ **Follow-up Questions**: [Questions to help farmer better, if any]
 🔗 **Related Topics**: [Other areas farmer might want to explore]`;
-
-    return fullPrompt;
   }
 
-  // GEMINI API CALL (Same as before but enhanced error handling)
-  private static async callGeminiAPI(prompt: string): Promise<string> {
-    const requestBody = {
-      contents: [{
-        parts: [{
-          text: prompt
-        }]
-      }],
-      generationConfig: {
-        temperature: 0.7,
-        topP: 0.9,
-        maxOutputTokens: 4000,
-        candidateCount: 1
+  // OPENROUTER API CALL
+  private static async callOpenRouterAPI(
+    systemPrompt: string,
+    userQuery: string,
+    session: ConversationSession
+  ): Promise<string> {
+    const messages = [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: userQuery
       }
+    ];
+
+    const requestBody = {
+      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      messages: messages
     };
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      }
-    );
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPEN_ROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': SITE_URL,
+        'X-Title': SITE_NAME
+      },
+      body: JSON.stringify(requestBody)
+    });
 
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status} - ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
     
-    if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
-      throw new Error('Invalid response from Gemini API');
+    if (!data.choices?.[0]?.message?.content) {
+      throw new Error('Invalid response from OpenRouter API');
     }
 
-    return data.candidates[0].content.parts[0].text;
+    return data.choices[0].message.content;
   }
 
   // PARSE AI RESPONSE FOR STRUCTURED DATA
   private static parseAiResponse(response: string): Omit<AiResponse, 'conversationId' | 'confidence' | 'sources' | 'responseTime' | 'intelligence_level'> {
-    // Extract structured information from the AI response
     const followUpQuestions: string[] = [];
     const relatedTopics: string[] = [];
     const recommendations = {
@@ -541,7 +530,6 @@ FORMAT YOUR RESPONSE AS:
       longTerm: [] as string[]
     };
 
-    // Simple parsing - in production, you might want more sophisticated NLP
     const lines = response.split('\n');
     let currentSection = '';
     
@@ -580,10 +568,8 @@ FORMAT YOUR RESPONSE AS:
     query: string, 
     response: Omit<AiResponse, 'conversationId' | 'confidence' | 'sources' | 'responseTime' | 'intelligence_level'>
   ): Promise<void> {
-    // Extract and update farmer profile information
     const lowerQuery = query.toLowerCase();
     
-    // Update crop type if mentioned
     const cropKeywords = {
       'rice': 'rice', 'धान': 'rice',
       'wheat': 'wheat', 'गेहूं': 'wheat', 
@@ -599,7 +585,6 @@ FORMAT YOUR RESPONSE AS:
       }
     }
 
-    // Update farm size if mentioned
     const sizeKeywords = {
       'small': 'small', 'छोटा': 'small',
       'medium': 'medium', 'मध्यम': 'medium',
@@ -614,7 +599,6 @@ FORMAT YOUR RESPONSE AS:
       }
     }
 
-    // Add current query to issues if it's a problem
     if (lowerQuery.includes('problem') || lowerQuery.includes('issue') || lowerQuery.includes('समस्या') || 
         lowerQuery.includes('disease') || lowerQuery.includes('बीमारी')) {
       if (!session.context.currentIssues) session.context.currentIssues = [];
@@ -624,7 +608,6 @@ FORMAT YOUR RESPONSE AS:
       }
     }
 
-    // Add recommendations to context
     if (response.recommendations) {
       if (!session.context.previousRecommendations) session.context.previousRecommendations = [];
       
@@ -635,25 +618,20 @@ FORMAT YOUR RESPONSE AS:
           }
         });
       
-      // Keep only last 10 recommendations
       session.context.previousRecommendations = session.context.previousRecommendations.slice(-10);
     }
 
-    // Update title if it's still default
     if (session.title === 'New Farm Consultation' && session.messages.length > 2) {
       session.title = this.generateConversationTitle(query);
     }
 
-    // Set follow-up needed flag
     session.context.followUpNeeded = (response.followUpQuestions?.length || 0) > 0;
-
     session.updatedAt = new Date();
   }
 
   // SAVE CONVERSATION TO DATABASE
   private static async saveConversation(session: ConversationSession): Promise<void> {
     try {
-      // Upsert conversation record
       const { error: convError } = await supabase
         .from('conversations')
         .upsert({
@@ -669,7 +647,6 @@ FORMAT YOUR RESPONSE AS:
         return;
       }
 
-      // Save new messages (only the last 2 - user and assistant)
       const newMessages = session.messages.slice(-2);
       const messagesToInsert = newMessages.map(msg => ({
         id: `${session.id}_${msg.timestamp.getTime()}`,
@@ -689,13 +666,12 @@ FORMAT YOUR RESPONSE AS:
           console.error('Error saving messages:', msgError);
         }
       }
-
     } catch (error) {
       console.error('Error in saveConversation:', error);
     }
   }
 
-  // ENHANCED LOGGING WITH CONVERSATION CONTEXT
+  // LOGGING
   private static async logQuery(
     query: string,
     response: AiResponse,
@@ -711,7 +687,7 @@ FORMAT YOUR RESPONSE AS:
         sources: response.sources,
         intelligence_level: response.intelligence_level,
         status: 'success',
-        model_used: 'gemini-1.5-flash-latest',
+        model_used: 'llama-3.3-70b-instruct',
         user_feedback: null,
         conversation_id: conversationId
       };
@@ -729,9 +705,9 @@ FORMAT YOUR RESPONSE AS:
   // UTILITY METHODS
   private static getCurrentSeason(): 'summer' | 'monsoon' | 'winter' {
     const month = new Date().getMonth();
-    if (month >= 2 && month <= 5) return 'summer'; // March to June
-    if (month >= 6 && month <= 9) return 'monsoon'; // July to October  
-    return 'winter'; // November to February
+    if (month >= 2 && month <= 5) return 'summer';
+    if (month >= 6 && month <= 9) return 'monsoon';
+    return 'winter';
   }
 
   private static getTimeContext(): 'morning' | 'afternoon' | 'evening' | 'night' {
@@ -779,7 +755,6 @@ FORMAT YOUR RESPONSE AS:
       }
     }
 
-    // Fallback: return first few words if it contains problem indicators
     if (query.toLowerCase().includes('problem') || query.toLowerCase().includes('समस्या')) {
       return query.substring(0, 50) + (query.length > 50 ? '...' : '');
     }
@@ -794,9 +769,6 @@ FORMAT YOUR RESPONSE AS:
 
   // PUBLIC METHODS FOR CONVERSATION MANAGEMENT
 
-  /**
-   * Get conversation history for a specific conversation
-   */
   static async getConversationHistory(conversationId: string): Promise<ConversationMessage[]> {
     try {
       const session = await this.getConversationSession(conversationId);
@@ -807,9 +779,6 @@ FORMAT YOUR RESPONSE AS:
     }
   }
 
-  /**
-   * Get all conversations (public, shared across all users)
-   */
   static async getUserConversations(userId?: string | null, limit: number = 20): Promise<ConversationSession[]> {
     try {
       const { data, error } = await supabase
@@ -823,7 +792,7 @@ FORMAT YOUR RESPONSE AS:
       return data.map(conv => ({
         id: conv.id,
         title: conv.title,
-        messages: [], // Messages loaded separately when needed
+        messages: [],
         createdAt: new Date(conv.created_at),
         updatedAt: new Date(conv.updated_at),
         context: conv.context || {}
@@ -834,12 +803,8 @@ FORMAT YOUR RESPONSE AS:
     }
   }
 
-  /**
-   * Delete a conversation
-   */
   static async deleteConversation(conversationId: string): Promise<boolean> {
     try {
-      // Delete messages first
       const { error: msgError } = await supabase
         .from('conversation_messages')
         .delete()
@@ -850,7 +815,6 @@ FORMAT YOUR RESPONSE AS:
         return false;
       }
 
-      // Delete conversation
       const { error: convError } = await supabase
         .from('conversations')
         .delete()
@@ -861,7 +825,6 @@ FORMAT YOUR RESPONSE AS:
         return false;
       }
 
-      // Remove from cache
       this.conversationCache.delete(conversationId);
       return true;
     } catch (error) {
@@ -870,9 +833,6 @@ FORMAT YOUR RESPONSE AS:
     }
   }
 
-  /**
-   * Update conversation title
-   */
   static async updateConversationTitle(conversationId: string, title: string): Promise<boolean> {
     try {
       const { error } = await supabase
@@ -885,7 +845,6 @@ FORMAT YOUR RESPONSE AS:
         return false;
       }
 
-      // Update cache
       if (this.conversationCache.has(conversationId)) {
         const session = this.conversationCache.get(conversationId)!;
         session.title = title;
@@ -899,15 +858,12 @@ FORMAT YOUR RESPONSE AS:
     }
   }
 
-  /**
-   * Get conversation insights and analytics
-   */
   static async getConversationInsights(conversationId: string): Promise<{
     totalMessages: number;
     topics: string[];
     issues: string[];
     recommendations: string[];
-    duration: number; // in minutes
+    duration: number;
     lastActivity: Date;
   }> {
     try {
@@ -956,9 +912,6 @@ FORMAT YOUR RESPONSE AS:
     }
   }
 
-  /**
-   * Search conversations by query (public search across all conversations)
-   */
   static async searchConversations(
     userId: string | null,
     searchQuery: string,
@@ -988,8 +941,7 @@ FORMAT YOUR RESPONSE AS:
     }
   }
 
-  // EXISTING METHODS (Enhanced with conversation context)
-
+  // LOCATION AND SENSOR BASED METHODS
   static getLocationBasedAdvice(
     latitude: number, 
     longitude: number, 
@@ -1017,7 +969,7 @@ FORMAT YOUR RESPONSE AS:
     return this.processQuery(query, conversationId, undefined, language);
   }
 
-  // ENHANCED PERFORMANCE MONITORING
+  // PERFORMANCE MONITORING
   static async getPerformanceStats(): Promise<{
     totalQueries: number;
     avgResponseTime: number;
@@ -1051,7 +1003,6 @@ FORMAT YOUR RESPONSE AS:
       const successRate = totalQueries > 0 ? successfulQueries / totalQueries : 0;
       const lastQueryTime = logs[0]?.created_at || null;
 
-      // Calculate conversation stats
       const totalConversations = conversations.length;
       const recentConversations = conversations.filter(conv => {
         const updatedAt = new Date(conv.updated_at);
@@ -1060,7 +1011,6 @@ FORMAT YOUR RESPONSE AS:
       });
       const activeConversations = recentConversations.length;
 
-      // Calculate average conversation length
       const conversationLengths = await Promise.all(
         conversations.slice(0, 20).map(async conv => {
           const { data: messages } = await supabase
