@@ -49,7 +49,7 @@ const ChatbotPage: React.FC = () => {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Get Deepgram API key from environment
-  const DEEPGRAM_API_KEY = process.env.REACT_APP_DEEPGRAM_API_KEY || '';
+  const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || '';
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
