@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader, MessageSquare, Menu, Plus, Trash2, Edit3, Search, X } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { AiService } from '../../services/aiService';
+import { AuthService } from '../../services/authService';
 
 interface Message {
   id: string;
@@ -19,82 +22,6 @@ interface Conversation {
   timestamp: Date;
   messageCount: number;
 }
-
-// Mock services (replace these with actual imports in production)
-const useLanguage = () => ({ language: 'en' });
-
-const AiService = {
-  processQuery: async (query: string, conversationId?: string | null, userId?: string, language?: string) => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    return {
-      advice: `Based on your query about "${query}", here's my recommendation:\n\n**Analysis:** Your question has been analyzed using live sensor data and weather conditions.\n\n**Recommendation:** This is a simulated response. The actual system would provide detailed farming advice based on your specific conditions.`,
-      confidence: 0.92,
-      responseTime: 2000,
-      intelligence_level: 'advanced' as const,
-      sources: ['live_sensor_data', 'live_weather_data', 'gemini_ai'],
-      conversationId: conversationId || Date.now().toString()
-    };
-  },
-  getUserConversations: async () => {
-    // Simulate loading conversations from backend
-    return [
-      {
-        id: '1',
-        title: 'Wheat Irrigation Schedule',
-        messages: [{ content: 'What is the best irrigation schedule for wheat?' }],
-        updatedAt: new Date(Date.now() - 86400000)
-      },
-      {
-        id: '2',
-        title: 'Pest Control for Tomatoes',
-        messages: [{ content: 'How to prevent pests in tomato plants?' }],
-        updatedAt: new Date(Date.now() - 172800000)
-      }
-    ];
-  },
-  getConversationHistory: async (conversationId: string) => {
-    // Simulate loading conversation history
-    return [
-      {
-        id: '1',
-        content: '🌾 Hello! I\'m your advanced AI farming assistant.',
-        role: 'assistant',
-        timestamp: new Date(Date.now() - 3600000),
-        metadata: { intelligence_level: 'advanced' }
-      },
-      {
-        id: '2',
-        content: 'Previous question from this conversation',
-        role: 'user',
-        timestamp: new Date(Date.now() - 3000000),
-        metadata: {}
-      },
-      {
-        id: '3',
-        content: 'Previous AI response with detailed advice.',
-        role: 'assistant',
-        timestamp: new Date(Date.now() - 2900000),
-        metadata: { confidence: 0.88, responseTime: 1500, intelligence_level: 'smart' }
-      }
-    ];
-  },
-  deleteConversation: async (conversationId: string) => {
-    // Simulate delete operation
-    await new Promise(resolve => setTimeout(resolve, 500));
-  },
-  updateConversationTitle: async (conversationId: string, title: string) => {
-    // Simulate update operation
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-};
-
-const AuthService = {
-  getCurrentUser: async () => {
-    // Simulate getting current user
-    return { id: 'user123' };
-  }
-};
 
 const ChatbotPage: React.FC = () => {
   const { language } = useLanguage();
@@ -666,4 +593,3 @@ const ChatbotPage: React.FC = () => {
 };
 
 export default ChatbotPage;
-
