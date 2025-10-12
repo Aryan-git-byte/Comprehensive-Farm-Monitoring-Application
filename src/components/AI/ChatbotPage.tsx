@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader, MessageSquare, Menu, Plus, Trash2, Edit3, Search, X } from 'lucide-react';
+import { Send, Bot, User, Loader, MessageSquare, Menu, Plus, Trash2, Edit3, Search, X, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { AiService } from '../../services/aiService';
 import { AuthService } from '../../services/authService';
@@ -36,8 +36,20 @@ const ChatbotPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+  
+  // TTS & STT States
+  const [isRecording, setIsRecording] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Get Deepgram API key from environment
+  const DEEPGRAM_API_KEY = process.env.REACT_APP_DEEPGRAM_API_KEY || '';
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -96,6 +108,135 @@ const ChatbotPage: React.FC = () => {
     }
   }, [language, messages.length]);
 
+  // Speech-to-Text using Deepgram
+  const startRecording = async () => {
+    if (!DEEPGRAM_API_KEY) {
+      alert('Deepgram API key not configured. Please add REACT_APP_DEEPGRAM_API_KEY to your .env file');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await transcribeAudio(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      alert('Could not access microphone. Please check permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const transcribeAudio = async (audioBlob: Blob) => {
+    try {
+      const response = await fetch('https://api.deepgram.com/v1/listen?model=nova-2&language=' + (language === 'hi' ? 'hi' : 'en'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${DEEPGRAM_API_KEY}`,
+          'Content-Type': 'audio/webm'
+        },
+        body: audioBlob
+      });
+
+      if (!response.ok) {
+        throw new Error('Transcription failed');
+      }
+
+      const data = await response.json();
+      const transcript = data.results?.channels[0]?.alternatives[0]?.transcript || '';
+      
+      if (transcript) {
+        setInputText(transcript);
+      }
+    } catch (error) {
+      console.error('Error transcribing audio:', error);
+      alert('Transcription failed. Please check your API key and try again.');
+    }
+  };
+
+  // Text-to-Speech using Deepgram
+  const speakText = async (text: string) => {
+    if (!DEEPGRAM_API_KEY) {
+      alert('Deepgram API key not configured');
+      return;
+    }
+
+    // Stop any currently playing audio
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+
+    try {
+      setIsSpeaking(true);
+      
+      const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-asteria-en', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${DEEPGRAM_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text })
+      });
+
+      if (!response.ok) {
+        throw new Error('TTS failed');
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      currentAudioRef.current = audio;
+
+      audio.onended = () => {
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        currentAudioRef.current = null;
+      };
+
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        currentAudioRef.current = null;
+      };
+
+      await audio.play();
+    } catch (error) {
+      console.error('Error with text-to-speech:', error);
+      setIsSpeaking(false);
+      alert('Text-to-speech failed. Please try again.');
+    }
+  };
+
+  const stopSpeaking = () => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+      setIsSpeaking(false);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!inputText.trim() || isLoading) return;
 
@@ -146,6 +287,11 @@ const ChatbotPage: React.FC = () => {
       };
 
       setMessages(prev => [...prev, aiMessage]);
+
+      // Auto-speak AI response if enabled
+      if (autoSpeak && DEEPGRAM_API_KEY) {
+        speakText(response.advice);
+      }
     } catch (error) {
       const responseTime = responseStartTime ? Date.now() - responseStartTime : 0;
       const errorMessage: Message = {
@@ -326,6 +472,32 @@ const ChatbotPage: React.FC = () => {
           </button>
         </div>
 
+        {/* Voice Settings */}
+        <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            {language === 'hi' ? 'वॉइस सेटिंग्स' : 'Voice Settings'}
+          </h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+              <span className="text-xs text-gray-600 dark:text-gray-400">
+                {DEEPGRAM_API_KEY ? '✓ Voice Enabled' : '✗ API Key Missing'}
+              </span>
+            </div>
+            <label className="flex items-center space-x-2 cursor-pointer px-2">
+              <input
+                type="checkbox"
+                checked={autoSpeak}
+                onChange={(e) => setAutoSpeak(e.target.checked)}
+                disabled={!DEEPGRAM_API_KEY}
+                className="w-4 h-4 text-green-600 rounded disabled:opacity-50"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                {language === 'hi' ? 'ऑटो-स्पीक' : 'Auto-speak responses'}
+              </span>
+            </label>
+          </div>
+        </div>
+
         {/* Search */}
         <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="relative">
@@ -450,6 +622,7 @@ const ChatbotPage: React.FC = () => {
                   </h1>
                   <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
                     {language === 'hi' ? 'ऑनलाइन • <20 सेकंड' : 'Online • <20 seconds'}
+                    {DEEPGRAM_API_KEY && <span className="ml-2">🎤</span>}
                   </p>
                 </div>
               </div>
@@ -490,9 +663,21 @@ const ChatbotPage: React.FC = () => {
                       ? 'bg-blue-500 text-white'
                       : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 shadow-sm'
                   }`}>
-                    <p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base break-words">
-                      {formatMessageText(message.text)}
-                    </p>
+                    <div className="flex items-start justify-between">
+                      <p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base break-words flex-1">
+                        {formatMessageText(message.text)}
+                      </p>
+                      {message.sender === 'ai' && DEEPGRAM_API_KEY && (
+                        <button
+                          onClick={() => speakText(message.text)}
+                          disabled={isSpeaking}
+                          className="ml-2 p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-50 flex-shrink-0"
+                          title={language === 'hi' ? 'बोलें' : 'Speak'}
+                        >
+                          <Volume2 className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                        </button>
+                      )}
+                    </div>
                     {message.sender === 'ai' && (
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-600 text-xs gap-2 sm:gap-0">
                         <div className="flex items-center flex-wrap gap-2 sm:gap-3 opacity-70">
@@ -556,6 +741,22 @@ const ChatbotPage: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-3 sm:p-4 md:p-6">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-end space-x-2 sm:space-x-4">
+              {/* Voice Input Button */}
+              {DEEPGRAM_API_KEY && (
+                <button
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={isLoading}
+                  className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-200 transform hover:scale-105 active:scale-95 flex-shrink-0 ${
+                    isRecording 
+                      ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  title={isRecording ? (language === 'hi' ? 'रुकें' : 'Stop recording') : (language === 'hi' ? 'बोलें' : 'Start voice input')}
+                >
+                  {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                </button>
+              )}
+
               <div className="flex-1">
                 <textarea
                   ref={textareaRef}
@@ -565,13 +766,25 @@ const ChatbotPage: React.FC = () => {
                   placeholder={language === 'hi' ? 'अपना सवाल यहाँ लिखें...' : 'Type your question here...'}
                   className="w-full resize-none border border-gray-300 dark:border-gray-600 rounded-xl sm:rounded-2xl px-4 py-3 sm:px-6 sm:py-4 focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:text-white text-sm sm:text-base"
                   rows={1}
-                  disabled={isLoading}
+                  disabled={isLoading || isRecording}
                   style={{ minHeight: '48px', maxHeight: '120px' }}
                 />
               </div>
+
+              {/* Stop Speaking Button */}
+              {isSpeaking && (
+                <button
+                  onClick={stopSpeaking}
+                  className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-orange-500 hover:bg-orange-600 text-white transition-all duration-200 transform hover:scale-105 active:scale-95 flex-shrink-0"
+                  title={language === 'hi' ? 'बोलना बंद करें' : 'Stop speaking'}
+                >
+                  <VolumeX className="h-5 w-5" />
+                </button>
+              )}
+
               <button
                 onClick={handleSendMessage}
-                disabled={!inputText.trim() || isLoading}
+                disabled={!inputText.trim() || isLoading || isRecording}
                 className="bg-gradient-to-r from-green-600 to-blue-600 text-white p-3 sm:p-4 rounded-xl sm:rounded-2xl hover:from-green-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 active:scale-95 flex-shrink-0"
               >
                 <Send className="h-5 w-5" />
@@ -584,6 +797,15 @@ const ChatbotPage: React.FC = () => {
                 <span>📊</span>
                 <span>{language === 'hi' ? 'लाइव डेटा से' : 'With live data'}</span>
               </span>
+              {DEEPGRAM_API_KEY && (
+                <>
+                  <span className="hidden sm:inline">•</span>
+                  <span className="flex items-center space-x-1">
+                    <span>🎤</span>
+                    <span>{language === 'hi' ? 'वॉइस सक्षम' : 'Voice enabled'}</span>
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
