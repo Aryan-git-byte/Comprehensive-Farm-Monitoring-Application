@@ -187,7 +187,7 @@ const ChatbotPage: React.FC = () => {
     const cleanText = text
       .replace(/\*\*/g, '') // Remove ** markdown
       .replace(/\*/g, '') // Remove single * as well
-      .replace(/[^\p{L}\p{N}\p{P}\p{Z}]/gu, '') // Remove emojis and special symbols
+      .replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '') // Remove emojis only
       .trim();
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
