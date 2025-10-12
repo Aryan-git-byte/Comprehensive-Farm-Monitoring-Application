@@ -46,7 +46,6 @@ const ChatbotPage: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Get Deepgram API key from environment
   const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || '';
@@ -175,64 +174,39 @@ const ChatbotPage: React.FC = () => {
     }
   };
 
-  // Text-to-Speech using Deepgram
-  const speakText = async (text: string) => {
-    if (!DEEPGRAM_API_KEY) {
-      alert('Deepgram API key not configured');
-      return;
+  // Text-to-Speech using Chrome's built-in speechSynthesis
+  const speakWithChromeTTS = (text: string) => {
+    // Stop any currently playing speech
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
     }
 
-    // Stop any currently playing audio
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
-    }
+    setIsSpeaking(true);
 
-    try {
-      setIsSpeaking(true);
-      
-      const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-asteria-en', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Token ${DEEPGRAM_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ text })
-      });
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Set language based on current language setting
+    utterance.lang = language === 'hi' ? 'hi-IN' : 'en-US';
+    
+    // Optional: Configure voice parameters
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
 
-      if (!response.ok) {
-        throw new Error('TTS failed');
-      }
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      currentAudioRef.current = audio;
-
-      audio.onended = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-        currentAudioRef.current = null;
-      };
-
-      audio.onerror = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-        currentAudioRef.current = null;
-      };
-
-      await audio.play();
-    } catch (error) {
-      console.error('Error with text-to-speech:', error);
+    utterance.onend = () => {
       setIsSpeaking(false);
-      alert('Text-to-speech failed. Please try again.');
-    }
+    };
+
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
   };
 
   const stopSpeaking = () => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
       setIsSpeaking(false);
     }
   };
@@ -289,8 +263,8 @@ const ChatbotPage: React.FC = () => {
       setMessages(prev => [...prev, aiMessage]);
 
       // Auto-speak AI response if enabled
-      if (autoSpeak && DEEPGRAM_API_KEY) {
-        speakText(response.advice);
+      if (autoSpeak) {
+        speakWithChromeTTS(response.advice);
       }
     } catch (error) {
       const responseTime = responseStartTime ? Date.now() - responseStartTime : 0;
@@ -488,8 +462,7 @@ const ChatbotPage: React.FC = () => {
                 type="checkbox"
                 checked={autoSpeak}
                 onChange={(e) => setAutoSpeak(e.target.checked)}
-                disabled={!DEEPGRAM_API_KEY}
-                className="w-4 h-4 text-green-600 rounded disabled:opacity-50"
+                className="w-4 h-4 text-green-600 rounded"
               />
               <span className="text-sm text-gray-700 dark:text-gray-300">
                 {language === 'hi' ? 'ऑटो-स्पीक' : 'Auto-speak responses'}
@@ -667,9 +640,9 @@ const ChatbotPage: React.FC = () => {
                       <p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base break-words flex-1">
                         {formatMessageText(message.text)}
                       </p>
-                      {message.sender === 'ai' && DEEPGRAM_API_KEY && (
+                      {message.sender === 'ai' && (
                         <button
-                          onClick={() => speakText(message.text)}
+                          onClick={() => speakWithChromeTTS(message.text)}
                           disabled={isSpeaking}
                           className="ml-2 p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-50 flex-shrink-0"
                           title={language === 'hi' ? 'बोलें' : 'Speak'}
