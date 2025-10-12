@@ -183,8 +183,12 @@ const ChatbotPage: React.FC = () => {
 
     setIsSpeaking(true);
 
-    // Remove ** markdown formatting before speaking
-    const cleanText = text.replace(/\*\*/g, '');
+    // Remove ** markdown formatting and emojis before speaking
+    const cleanText = text
+      .replace(/\*\*/g, '') // Remove ** markdown
+      .replace(/\*/g, '') // Remove single * as well
+      .replace(/[^\p{L}\p{N}\p{P}\p{Z}]/gu, '') // Remove emojis and special symbols
+      .trim();
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     
