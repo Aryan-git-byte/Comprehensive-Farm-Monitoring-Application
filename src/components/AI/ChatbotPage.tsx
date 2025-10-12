@@ -20,15 +20,92 @@ interface Conversation {
   messageCount: number;
 }
 
+// Mock services (replace these with actual imports in production)
+const useLanguage = () => ({ language: 'en' });
+
+const AiService = {
+  processQuery: async (query: string, conversationId?: string | null, userId?: string, language?: string) => {
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    return {
+      advice: `Based on your query about "${query}", here's my recommendation:\n\n**Analysis:** Your question has been analyzed using live sensor data and weather conditions.\n\n**Recommendation:** This is a simulated response. The actual system would provide detailed farming advice based on your specific conditions.`,
+      confidence: 0.92,
+      responseTime: 2000,
+      intelligence_level: 'advanced' as const,
+      sources: ['live_sensor_data', 'live_weather_data', 'gemini_ai'],
+      conversationId: conversationId || Date.now().toString()
+    };
+  },
+  getUserConversations: async () => {
+    // Simulate loading conversations from backend
+    return [
+      {
+        id: '1',
+        title: 'Wheat Irrigation Schedule',
+        messages: [{ content: 'What is the best irrigation schedule for wheat?' }],
+        updatedAt: new Date(Date.now() - 86400000)
+      },
+      {
+        id: '2',
+        title: 'Pest Control for Tomatoes',
+        messages: [{ content: 'How to prevent pests in tomato plants?' }],
+        updatedAt: new Date(Date.now() - 172800000)
+      }
+    ];
+  },
+  getConversationHistory: async (conversationId: string) => {
+    // Simulate loading conversation history
+    return [
+      {
+        id: '1',
+        content: '🌾 Hello! I\'m your advanced AI farming assistant.',
+        role: 'assistant',
+        timestamp: new Date(Date.now() - 3600000),
+        metadata: { intelligence_level: 'advanced' }
+      },
+      {
+        id: '2',
+        content: 'Previous question from this conversation',
+        role: 'user',
+        timestamp: new Date(Date.now() - 3000000),
+        metadata: {}
+      },
+      {
+        id: '3',
+        content: 'Previous AI response with detailed advice.',
+        role: 'assistant',
+        timestamp: new Date(Date.now() - 2900000),
+        metadata: { confidence: 0.88, responseTime: 1500, intelligence_level: 'smart' }
+      }
+    ];
+  },
+  deleteConversation: async (conversationId: string) => {
+    // Simulate delete operation
+    await new Promise(resolve => setTimeout(resolve, 500));
+  },
+  updateConversationTitle: async (conversationId: string, title: string) => {
+    // Simulate update operation
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+};
+
+const AuthService = {
+  getCurrentUser: async () => {
+    // Simulate getting current user
+    return { id: 'user123' };
+  }
+};
+
 const ChatbotPage: React.FC = () => {
-  const [language, setLanguage] = useState('en');
+  const { language } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
-  const [showSidebar, setShowSidebar] = useState(false); // Default to false for mobile-first
+  const [showSidebar, setShowSidebar] = useState(false);
   const [userConversations, setUserConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
@@ -51,6 +128,31 @@ const ChatbotPage: React.FC = () => {
     }
   }, [inputText]);
 
+  // Initialize user and load all conversations
+  useEffect(() => {
+    const initializeUser = async () => {
+      try {
+        const user = await AuthService.getCurrentUser();
+        setCurrentUserId(user?.id || null);
+
+        // Load all conversations regardless of authentication
+        const conversations = await AiService.getUserConversations();
+        setUserConversations(conversations.map(conv => ({
+          id: conv.id,
+          title: conv.title,
+          lastMessage: conv.messages[conv.messages.length - 1]?.content || '',
+          timestamp: conv.updatedAt,
+          messageCount: conv.messages.length
+        })));
+      } catch (error) {
+        console.error('Error initializing user:', error);
+        setCurrentUserId(null);
+      }
+    };
+
+    initializeUser();
+  }, []);
+
   // Initialize welcome message
   useEffect(() => {
     if (messages.length === 0) {
@@ -67,34 +169,6 @@ const ChatbotPage: React.FC = () => {
     }
   }, [language, messages.length]);
 
-  // Mock conversations for demo
-  useEffect(() => {
-    const mockConversations: Conversation[] = [
-      {
-        id: '1',
-        title: 'Wheat Irrigation Schedule',
-        lastMessage: 'What is the best irrigation schedule for wheat?',
-        timestamp: new Date(Date.now() - 86400000),
-        messageCount: 8
-      },
-      {
-        id: '2',
-        title: 'Pest Control for Tomatoes',
-        lastMessage: 'How to prevent pests in tomato plants?',
-        timestamp: new Date(Date.now() - 172800000),
-        messageCount: 5
-      },
-      {
-        id: '3',
-        title: 'Soil pH Analysis',
-        lastMessage: 'My soil pH is 6.5, is it good?',
-        timestamp: new Date(Date.now() - 259200000),
-        messageCount: 12
-      }
-    ];
-    setUserConversations(mockConversations);
-  }, []);
-
   const handleSendMessage = async () => {
     if (!inputText.trim() || isLoading) return;
 
@@ -106,90 +180,102 @@ const ChatbotPage: React.FC = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const queryText = inputText;
     setInputText('');
     setIsLoading(true);
     setResponseStartTime(Date.now());
 
-    // Mock AI response
-    setTimeout(() => {
-      const responseTime = Date.now() - (responseStartTime || Date.now());
+    try {
+      const response = await AiService.processQuery(
+        queryText,
+        currentConversationId,
+        currentUserId || undefined,
+        language
+      );
+
+      // Update conversation ID if this is a new conversation
+      if (!currentConversationId && response.conversationId) {
+        setCurrentConversationId(response.conversationId);
+        // Refresh conversations list for all users
+        const conversations = await AiService.getUserConversations();
+        setUserConversations(conversations.map(conv => ({
+          id: conv.id,
+          title: conv.title,
+          lastMessage: conv.messages[conv.messages.length - 1]?.content || '',
+          timestamp: conv.updatedAt,
+          messageCount: conv.messages.length
+        })));
+      }
+      
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: `Based on your query, here's my advice:\n\n**Recommendation:** ${userMessage.text}\n\nThis is a simulated response. The actual system would analyze your sensor data, weather conditions, and soil health to provide personalized farming advice.`,
+        text: response.advice,
         sender: 'ai',
         timestamp: new Date(),
-        confidence: 0.92,
-        responseTime: responseTime,
-        intelligence_level: 'advanced',
-        sources: ['live_sensor_data', 'live_weather_data', 'gemini_ai']
+        confidence: response.confidence,
+        responseTime: response.responseTime,
+        intelligence_level: response.intelligence_level,
+        sources: response.sources
       };
 
       setMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      const responseTime = responseStartTime ? Date.now() - responseStartTime : 0;
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: language === 'hi' 
+          ? `⚠️ माफ करें, ${responseTime > 25000 ? 'जवाब देने में बहुत समय लग गया (25 सेकंड से अधिक)' : 'तकनीकी समस्या हो रही है'}। कृपया फिर कोशिश करें।`
+          : `⚠️ Sorry, ${responseTime > 25000 ? 'response took too long (over 25 seconds)' : 'technical issue occurred'}. Please try again.`,
+        sender: 'ai',
+        timestamp: new Date(),
+        confidence: 0.1,
+        responseTime,
+        intelligence_level: 'instant'
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
       setResponseStartTime(null);
-
-      // Create new conversation if none exists
-      if (!currentConversationId) {
-        const newConv: Conversation = {
-          id: Date.now().toString(),
-          title: userMessage.text.slice(0, 30) + '...',
-          lastMessage: userMessage.text,
-          timestamp: new Date(),
-          messageCount: 2
-        };
-        setUserConversations(prev => [newConv, ...prev]);
-        setCurrentConversationId(newConv.id);
-      } else {
-        // Update existing conversation
-        setUserConversations(prev => prev.map(conv => 
-          conv.id === currentConversationId 
-            ? { ...conv, lastMessage: userMessage.text, timestamp: new Date(), messageCount: conv.messageCount + 2 }
-            : conv
-        ));
-      }
-    }, 2000);
+    }
   };
 
   const handleNewChat = () => {
     setCurrentConversationId(null);
     setMessages([]);
     setInputText('');
-    setShowSidebar(false); // Close sidebar on mobile after creating new chat
+    setShowSidebar(false);
+    // Re-initialize welcome message
+    const welcomeMessage: Message = {
+      id: '1',
+      text: language === 'hi' 
+        ? '🌾 नमस्ते! मैं आपका उन्नत AI खेती सहायक हूं। आप मुझसे अपनी फसल, सिंचाई, पोषण या किसी भी खेती संबंधी सवाल पूछ सकते हैं।'
+        : '🌾 Hello! I\'m your advanced AI farming assistant. Ask me about your crops, irrigation, nutrition, or any farming questions.',
+      sender: 'ai',
+      timestamp: new Date(),
+      intelligence_level: 'advanced'
+    };
+    setMessages([welcomeMessage]);
   };
 
   const handleSelectConversation = async (conversationId: string) => {
-    setCurrentConversationId(conversationId);
-    
-    // Mock loading conversation history
-    const mockMessages: Message[] = [
-      {
-        id: '1',
-        text: language === 'hi' 
-          ? '🌾 नमस्ते! मैं आपका उन्नत AI खेती सहायक हूं।'
-          : '🌾 Hello! I\'m your advanced AI farming assistant.',
-        sender: 'ai',
-        timestamp: new Date(Date.now() - 3600000),
-        intelligence_level: 'advanced'
-      },
-      {
-        id: '2',
-        text: 'Previous question from this conversation',
-        sender: 'user',
-        timestamp: new Date(Date.now() - 3000000),
-      },
-      {
-        id: '3',
-        text: 'Previous AI response from this conversation with detailed advice.',
-        sender: 'ai',
-        timestamp: new Date(Date.now() - 2900000),
-        confidence: 0.88,
-        responseTime: 1500,
-        intelligence_level: 'smart'
-      }
-    ];
-    
-    setMessages(mockMessages);
-    setShowSidebar(false); // Close sidebar on mobile after selecting conversation
+    try {
+      setCurrentConversationId(conversationId);
+      const history = await AiService.getConversationHistory(conversationId);
+      const formattedMessages: Message[] = history.map(msg => ({
+        id: msg.id || Date.now().toString(),
+        text: msg.content,
+        sender: msg.role === 'user' ? 'user' : 'ai',
+        timestamp: new Date(msg.timestamp),
+        confidence: (msg.metadata as any)?.confidence,
+        responseTime: (msg.metadata as any)?.responseTime,
+        intelligence_level: (msg.metadata as any)?.intelligence_level,
+        sources: (msg.metadata as any)?.sources
+      }));
+      setMessages(formattedMessages);
+      setShowSidebar(false);
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+    }
   };
 
   const handleDeleteConversation = async (conversationId: string, e: React.MouseEvent) => {
@@ -199,21 +285,31 @@ const ChatbotPage: React.FC = () => {
       return;
     }
 
-    setUserConversations(prev => prev.filter(conv => conv.id !== conversationId));
-    
-    if (currentConversationId === conversationId) {
-      handleNewChat();
+    try {
+      await AiService.deleteConversation(conversationId);
+      setUserConversations(prev => prev.filter(conv => conv.id !== conversationId));
+      
+      if (currentConversationId === conversationId) {
+        handleNewChat();
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
     }
   };
 
   const handleEditTitle = async (conversationId: string, newTitle: string) => {
     if (!newTitle.trim()) return;
     
-    setUserConversations(prev => prev.map(conv => 
-      conv.id === conversationId ? { ...conv, title: newTitle } : conv
-    ));
-    setEditingConversationId(null);
-    setEditingTitle('');
+    try {
+      await AiService.updateConversationTitle(conversationId, newTitle);
+      setUserConversations(prev => prev.map(conv => 
+        conv.id === conversationId ? { ...conv, title: newTitle } : conv
+      ));
+      setEditingConversationId(null);
+      setEditingTitle('');
+    } catch (error) {
+      console.error('Error updating conversation title:', error);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -349,7 +445,7 @@ const ChatbotPage: React.FC = () => {
                           value={editingTitle}
                           onChange={(e) => setEditingTitle(e.target.value)}
                           onBlur={() => handleEditTitle(conversation.id, editingTitle)}
-                          onKeyPress={(e) => {
+                          onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               handleEditTitle(conversation.id, editingTitle);
                             }
@@ -570,3 +666,4 @@ const ChatbotPage: React.FC = () => {
 };
 
 export default ChatbotPage;
+
