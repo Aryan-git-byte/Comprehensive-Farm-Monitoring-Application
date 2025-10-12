@@ -183,7 +183,10 @@ const ChatbotPage: React.FC = () => {
 
     setIsSpeaking(true);
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    // Remove ** markdown formatting before speaking
+    const cleanText = text.replace(/\*\*/g, '');
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
     
     // Set language based on current language setting
     utterance.lang = language === 'hi' ? 'hi-IN' : 'en-US';
