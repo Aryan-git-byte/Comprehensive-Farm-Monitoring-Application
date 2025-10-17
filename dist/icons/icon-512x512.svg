@@ -1,0 +1,38 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#22c55e" rx="64"/>
+  
+  <!-- Farm/Plant Icon -->
+  <g transform="translate(128, 128)">
+    <!-- Sun -->
+    <circle cx="196" cy="20" r="16" fill="#fbbf24"/>
+    <line x1="196" y1="0" x2="196" y2="8" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+    <line x1="196" y1="32" x2="196" y2="40" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+    <line x1="176" y1="20" x2="184" y2="20" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+    <line x1="208" y1="20" x2="216" y2="20" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+    
+    <!-- Plant/Wheat -->
+    <path d="M 128 240 L 128 140 Q 128 120 140 110 Q 150 100 165 100" 
+          stroke="#ffffff" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <ellipse cx="165" cy="95" rx="15" ry="20" fill="#dcfce7"/>
+    <ellipse cx="155" cy="110" rx="12" ry="18" fill="#dcfce7"/>
+    <ellipse cx="145" cy="125" rx="10" ry="15" fill="#dcfce7"/>
+    
+    <path d="M 128 240 L 128 160 Q 128 140 115 130 Q 105 120 90 120" 
+          stroke="#ffffff" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <ellipse cx="90" cy="115" rx="15" ry="20" fill="#dcfce7"/>
+    <ellipse cx="100" cy="130" rx="12" ry="18" fill="#dcfce7"/>
+    <ellipse cx="110" cy="145" rx="10" ry="15" fill="#dcfce7"/>
+    
+    <!-- Ground/Soil -->
+    <ellipse cx="128" cy="250" rx="60" ry="15" fill="#15803d"/>
+    
+    <!-- AI Chip/Technology Element -->
+    <rect x="20" y="200" width="40" height="40" rx="4" fill="#ffffff" opacity="0.9"/>
+    <circle cx="28" cy="208" r="3" fill="#22c55e"/>
+    <circle cx="52" cy="208" r="3" fill="#22c55e"/>
+    <circle cx="28" cy="232" r="3" fill="#22c55e"/>
+    <circle cx="52" cy="232" r="3" fill="#22c55e"/>
+    <line x1="33" y1="220" x2="47" y2="220" stroke="#22c55e" stroke-width="2"/>
+  </g>
+</svg>
