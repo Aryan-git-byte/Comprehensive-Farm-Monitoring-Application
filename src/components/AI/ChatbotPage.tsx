@@ -455,11 +455,11 @@ const ChatbotPage: React.FC = () => {
   };
 
   return (
-    <div className="h-screen flex bg-gray-50 dark:bg-gray-900 overflow-hidden">
+    <div className="h-screen flex flex-col lg:flex-row bg-gray-50 dark:bg-gray-900 overflow-hidden">
       {/* Mobile Overlay */}
       {showSidebar && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
           onClick={() => setShowSidebar(false)}
         />
       )}
@@ -468,50 +468,52 @@ const ChatbotPage: React.FC = () => {
       <div className={`
         fixed lg:relative inset-y-0 left-0 z-50
         ${showSidebar ? 'translate-x-0' : '-translate-x-full'}
-        w-80 sm:w-96 lg:w-80
+        w-[85vw] max-w-[320px] lg:w-80
         transition-transform duration-300 ease-in-out
         bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col
-        lg:translate-x-0
+        lg:translate-x-0 shadow-2xl lg:shadow-none
       `}>
-        {/* Sidebar Header */}
-        <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
+        {/* Sidebar Header - Fixed Height */}
+        <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-3 lg:hidden">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               {language === 'hi' ? 'बातचीत' : 'Conversations'}
             </h2>
             <button
               onClick={() => setShowSidebar(false)}
-              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 transition-all touch-manipulation"
+              aria-label="Close sidebar"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
           <button
             onClick={handleNewChat}
-            className="w-full bg-green-600 text-white py-2.5 sm:py-3 px-4 rounded-xl font-medium hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+            className="w-full bg-gradient-to-r from-green-600 to-green-500 text-white py-3 px-4 rounded-xl font-medium hover:from-green-700 hover:to-green-600 active:scale-[0.98] transition-all shadow-sm flex items-center justify-center gap-2 touch-manipulation"
+            aria-label={language === 'hi' ? 'नई बातचीत' : 'New Chat'}
           >
             <Plus className="h-5 w-5" />
             <span>{language === 'hi' ? 'नई बातचीत' : 'New Chat'}</span>
           </button>
         </div>
 
-        {/* Voice Settings */}
-        <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
+        {/* Voice Settings - Fixed Height */}
+        <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
             {language === 'hi' ? 'वॉइस सेटिंग्स' : 'Voice Settings'}
           </h3>
           <div className="space-y-2">
             <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-              <span className="text-xs text-gray-600 dark:text-gray-400">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
                 {DEEPGRAM_API_KEY ? '✓ Voice Enabled' : '✗ API Key Missing'}
               </span>
             </div>
-            <label className="flex items-center space-x-2 cursor-pointer px-2">
+            <label className="flex items-center gap-3 cursor-pointer px-2 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors touch-manipulation">
               <input
                 type="checkbox"
                 checked={autoSpeak}
                 onChange={(e) => setAutoSpeak(e.target.checked)}
-                className="w-4 h-4 text-green-600 rounded"
+                className="w-4 h-4 text-green-600 rounded focus:ring-2 focus:ring-green-500"
               />
               <span className="text-sm text-gray-700 dark:text-gray-300">
                 {language === 'hi' ? 'ऑटो-स्पीक' : 'Auto-speak responses'}
@@ -520,27 +522,28 @@ const ChatbotPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700">
+        {/* Search - Fixed Height */}
+        <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             <input
               type="text"
               placeholder={language === 'hi' ? 'बातचीत खोजें...' : 'Search conversations...'}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:text-white text-sm"
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:text-white text-sm transition-all touch-manipulation"
+              aria-label={language === 'hi' ? 'बातचीत खोजें' : 'Search conversations'}
             />
           </div>
         </div>
 
-        {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+        {/* Conversations List - Scrollable */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4">
           <div className="space-y-2">
             {filteredConversations.length === 0 ? (
-              <div className="text-center py-8">
-                <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 dark:text-gray-400 text-sm">
+              <div className="text-center py-12">
+                <MessageSquare className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">
                   {searchTerm ? 
                     (language === 'hi' ? 'कोई बातचीत नहीं मिली' : 'No conversations found') :
                     (language === 'hi' ? 'अभी तक कोई बातचीत नहीं' : 'No conversations yet')
@@ -551,14 +554,14 @@ const ChatbotPage: React.FC = () => {
               filteredConversations.map((conversation) => (
                 <div
                   key={conversation.id}
-                  className={`group p-3 rounded-lg cursor-pointer transition-colors ${
+                  className={`group p-3 rounded-lg cursor-pointer transition-all active:scale-[0.98] touch-manipulation ${
                     currentConversationId === conversation.id
-                      ? 'bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700'
-                      : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                      ? 'bg-green-50 dark:bg-green-900/20 border-2 border-green-400 dark:border-green-600 shadow-sm'
+                      : 'hover:bg-gray-100 dark:hover:bg-gray-700 border-2 border-transparent'
                   }`}
                   onClick={() => handleSelectConversation(conversation.id)}
                 >
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       {editingConversationId === conversation.id ? (
                         <input
@@ -575,43 +578,46 @@ const ChatbotPage: React.FC = () => {
                               setEditingTitle('');
                             }
                           }}
-                          className="w-full bg-transparent border-none outline-none font-medium text-gray-900 dark:text-white"
+                          className="w-full bg-transparent border-none outline-none font-medium text-gray-900 dark:text-white p-0 focus:ring-0"
                           autoFocus
                           onClick={(e) => e.stopPropagation()}
                         />
                       ) : (
-                        <h3 className="font-medium text-gray-900 dark:text-white truncate">
+                        <h3 className="font-medium text-gray-900 dark:text-white truncate text-sm">
                           {conversation.title}
                         </h3>
                       )}
-                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1.5 leading-snug">
                         {conversation.lastMessage}
                       </p>
-                      <div className="flex items-center space-x-2 mt-2">
-                        <span className="text-xs text-gray-400">
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xs text-gray-400 font-medium">
                           {conversation.timestamp.toLocaleDateString()}
                         </span>
-                        <span className="text-xs text-gray-400">
-                          {conversation.messageCount} {language === 'hi' ? 'संदेश' : 'messages'}
+                        <span className="text-gray-300 dark:text-gray-600">•</span>
+                        <span className="text-xs text-gray-400 font-medium">
+                          {conversation.messageCount} {language === 'hi' ? 'संदेश' : 'msgs'}
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 lg:transition-opacity flex-shrink-0">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditingConversationId(conversation.id);
                           setEditingTitle(conversation.title);
                         }}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                        className="p-2 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-95 transition-all touch-manipulation"
+                        aria-label="Edit conversation"
                       >
-                        <Edit3 className="h-3.5 w-3.5" />
+                        <Edit3 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={(e) => handleDeleteConversation(conversation.id, e)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                        className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-95 transition-all touch-manipulation"
+                        aria-label="Delete conversation"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -623,115 +629,119 @@ const ChatbotPage: React.FC = () => {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Chat Header */}
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+      <div className="flex-1 flex flex-col min-w-0 h-full">
+        {/* Chat Header - Fixed Height */}
+        <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               <button
                 onClick={() => setShowSidebar(!showSidebar)}
-                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+                className="lg:hidden p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 transition-all touch-manipulation flex-shrink-0"
+                aria-label={showSidebar ? 'Close sidebar' : 'Open sidebar'}
               >
-                <Menu className="h-5 w-5" />
+                <Menu className="h-6 w-6" />
               </button>
-              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-                <div className="bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900/30 dark:to-blue-900/30 rounded-full p-1.5 sm:p-2 flex-shrink-0">
-                  <Bot className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900/30 dark:to-blue-900/30 rounded-full p-2 flex-shrink-0">
+                  <Bot className="h-6 w-6 text-green-600 dark:text-green-400" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="text-base sm:text-xl font-semibold text-gray-900 dark:text-white truncate">
+                  <h1 className="text-base font-semibold text-gray-900 dark:text-white truncate">
                     {language === 'hi' ? 'AI खेती सहायक' : 'AI Farm Assistant'}
                   </h1>
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
-                    {language === 'hi' ? 'ऑनलाइन • <20 सेकंड' : 'Online • <20 seconds'}
-                    {DEEPGRAM_API_KEY && <span className="ml-2">🎤</span>}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      {language === 'hi' ? 'ऑनलाइन • <20 सेकंड' : 'Online • <20 seconds'}
+                    </p>
+                    {DEEPGRAM_API_KEY && <span className="text-sm">🎤</span>}
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="flex items-center space-x-2 flex-shrink-0">
-              <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 hidden sm:inline">
-                {language === 'hi' ? 'लाइव डेटा' : 'Live data'}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline font-medium">
+                {language === 'hi' ? 'लाइव' : 'Live'}
               </span>
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             </div>
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
-          <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
+        {/* Messages - Scrollable */}
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 lg:px-6">
+          <div className="max-w-3xl mx-auto space-y-4">
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fadeIn`}
               >
-                <div className={`flex items-start space-x-2 sm:space-x-3 max-w-[85%] sm:max-w-[80%] ${
-                  message.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''
+                <div className={`flex items-start gap-2 max-w-[90%] sm:max-w-[85%] ${
+                  message.sender === 'user' ? 'flex-row-reverse' : ''
                 }`}>
-                  <div className={`flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                     message.sender === 'user' 
-                      ? 'bg-blue-500' 
+                      ? 'bg-gradient-to-br from-blue-500 to-blue-600' 
                       : 'bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900/30 dark:to-blue-900/30'
                   }`}>
                     {message.sender === 'user' ? (
-                      <User className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+                      <User className="h-4 w-4 text-white" />
                     ) : (
-                      <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" />
+                      <Bot className="h-4 w-4 text-green-600 dark:text-green-400" />
                     )}
                   </div>
-                  <div className={`rounded-2xl px-4 py-3 sm:px-6 sm:py-4 ${
+                  <div className={`rounded-2xl px-4 py-3 ${
                     message.sender === 'user'
-                      ? 'bg-blue-500 text-white'
+                      ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white'
                       : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 shadow-sm'
                   }`}>
-                    <div className="flex items-start justify-between">
-                      <p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base break-words flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="whitespace-pre-wrap leading-relaxed text-sm break-words flex-1">
                         {formatMessageText(message.text)}
                         {/* Show blinking cursor if this message is being streamed */}
                         {message.sender === 'ai' && isStreaming && message.text === messages[messages.length - 1]?.text && (
-                          <span className="inline-block w-0.5 h-5 bg-green-500 ml-1 animate-pulse"></span>
+                          <span className="inline-block w-0.5 h-4 bg-green-500 ml-1 animate-pulse"></span>
                         )}
                         {/* Show loading dots if message is empty and streaming hasn't started */}
                         {message.sender === 'ai' && !message.text && isLoading && (
-                          <span className="text-gray-400">●●●</span>
+                          <span className="text-gray-400 animate-pulse">●●●</span>
                         )}
                       </p>
-                      {message.sender === 'ai' && (
+                      {message.sender === 'ai' && message.text && (
                         <button
                           onClick={() => speakWithChromeTTS(message.text)}
                           disabled={isSpeaking}
-                          className="ml-2 p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-50 flex-shrink-0"
+                          className="flex-shrink-0 p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all active:scale-95 disabled:opacity-50 touch-manipulation"
                           title={language === 'hi' ? 'बोलें' : 'Speak'}
+                          aria-label={language === 'hi' ? 'बोलें' : 'Speak'}
                         >
                           <Volume2 className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                         </button>
                       )}
                     </div>
-                    {message.sender === 'ai' && (
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-gray-200 dark:border-gray-600 text-xs gap-2 sm:gap-0">
-                        <div className="flex items-center flex-wrap gap-2 sm:gap-3 opacity-70">
+                    {message.sender === 'ai' && (message.responseTime || message.confidence || message.sources) && (
+                      <div className="flex flex-wrap items-center justify-between mt-3 pt-2 border-t border-gray-200 dark:border-gray-600 text-xs gap-2">
+                        <div className="flex items-center flex-wrap gap-2 opacity-70">
                           {message.responseTime && (
-                            <span className="whitespace-nowrap">
+                            <span className="whitespace-nowrap font-medium">
                               ⏱️ {(message.responseTime / 1000).toFixed(1)}s
                             </span>
                           )}
                           {message.confidence && (
-                            <span className={`whitespace-nowrap ${getConfidenceColor(message.confidence)}`}>
+                            <span className={`whitespace-nowrap font-medium ${getConfidenceColor(message.confidence)}`}>
                               🎯 {Math.round(message.confidence * 100)}%
                             </span>
                           )}
                           {message.intelligence_level && (
-                            <span title={message.intelligence_level} className="whitespace-nowrap">
+                            <span title={message.intelligence_level} className="whitespace-nowrap text-base">
                               {getIntelligenceIcon(message.intelligence_level)}
                             </span>
                           )}
                         </div>
                         {message.sources && message.sources.length > 0 && (
-                          <div className="flex items-center space-x-1 opacity-70">
-                            {message.sources.includes('live_sensor_data') && <span title="Live Sensor Data">📊</span>}
-                            {message.sources.includes('live_weather_data') && <span title="Live Weather Data">🌤️</span>}
-                            {message.sources.includes('gemini_ai') && <span title="Gemini AI">🚀</span>}
+                          <div className="flex items-center gap-1 opacity-70">
+                            {message.sources.includes('live_sensor_data') && <span title="Live Sensor Data" className="text-base">📊</span>}
+                            {message.sources.includes('live_weather_data') && <span title="Live Weather Data" className="text-base">🌤️</span>}
+                            {message.sources.includes('gemini_ai') && <span title="Gemini AI" className="text-base">🚀</span>}
                           </div>
                         )}
                       </div>
@@ -742,18 +752,18 @@ const ChatbotPage: React.FC = () => {
             ))}
             
             {isLoading && (
-              <div className="flex justify-start">
-                <div className="flex items-start space-x-2 sm:space-x-3">
-                  <div className="bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900/30 dark:to-blue-900/30 rounded-full p-1.5 sm:p-2">
-                    <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" />
+              <div className="flex justify-start animate-fadeIn">
+                <div className="flex items-start gap-2">
+                  <div className="bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900/30 dark:to-blue-900/30 rounded-full p-2 flex-shrink-0">
+                    <Bot className="h-4 w-4 text-green-600 dark:text-green-400" />
                   </div>
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 sm:px-6 sm:py-4 border border-gray-200 dark:border-gray-700 shadow-sm">
-                    <div className="flex items-center space-x-3">
-                      <Loader className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-green-500" />
-                      <span className="text-gray-600 dark:text-gray-300 text-sm sm:text-base">
-                        {language === 'hi' ? 'डेटा विश्लेषण...' : 'Analyzing...'}
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <Loader className="h-4 w-4 animate-spin text-green-500" />
+                      <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                        {language === 'hi' ? 'विश्लेषण...' : 'Analyzing...'}
                         {responseStartTime && (
-                          <span className="ml-2 font-mono">
+                          <span className="ml-2 font-mono text-xs">
                             {Math.round((Date.now() - responseStartTime) / 1000)}s
                           </span>
                         )}
@@ -767,37 +777,39 @@ const ChatbotPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Input Area */}
-        <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-3 sm:p-4 md:p-6">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-end space-x-2 sm:space-x-4">
+        {/* Input Area - Fixed Height */}
+        <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-3 lg:p-4 shadow-lg">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex items-end gap-2">
               {/* Voice Input Button */}
               {DEEPGRAM_API_KEY && (
                 <button
                   onClick={isRecording ? stopRecording : startRecording}
                   disabled={isLoading}
-                  className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-200 transform hover:scale-105 active:scale-95 flex-shrink-0 ${
+                  className={`flex-shrink-0 p-3 rounded-xl transition-all active:scale-95 touch-manipulation ${
                     isRecording 
-                      ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  title={isRecording ? (language === 'hi' ? 'रुकें' : 'Stop recording') : (language === 'hi' ? 'बोलें' : 'Start voice input')}
+                      ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/50' 
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  } disabled:opacity-50 disabled:cursor-not-allowed ${isRecording ? 'animate-pulse' : ''}`}
+                  title={isRecording ? (language === 'hi' ? 'रुकें' : 'Stop') : (language === 'hi' ? 'बोलें' : 'Voice')}
+                  aria-label={isRecording ? (language === 'hi' ? 'रुकें' : 'Stop recording') : (language === 'hi' ? 'बोलें' : 'Start voice input')}
                 >
                   {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                 </button>
               )}
 
-              <div className="flex-1">
+              <div className="flex-1 relative">
                 <textarea
                   ref={textareaRef}
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder={language === 'hi' ? 'अपना सवाल यहाँ लिखें...' : 'Type your question here...'}
-                  className="w-full resize-none border border-gray-300 dark:border-gray-600 rounded-xl sm:rounded-2xl px-4 py-3 sm:px-6 sm:py-4 focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:text-white text-sm sm:text-base"
+                  className="w-full resize-none border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 focus:ring-2 focus:ring-green-500 focus:border-green-500 dark:bg-gray-700 dark:text-white text-sm placeholder-gray-400 dark:placeholder-gray-500 transition-all touch-manipulation"
                   rows={1}
                   disabled={isLoading || isRecording}
                   style={{ minHeight: '48px', maxHeight: '120px' }}
+                  aria-label={language === 'hi' ? 'संदेश टाइप करें' : 'Type message'}
                 />
               </div>
 
@@ -805,8 +817,9 @@ const ChatbotPage: React.FC = () => {
               {isSpeaking && (
                 <button
                   onClick={stopSpeaking}
-                  className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-orange-500 hover:bg-orange-600 text-white transition-all duration-200 transform hover:scale-105 active:scale-95 flex-shrink-0"
-                  title={language === 'hi' ? 'बोलना बंद करें' : 'Stop speaking'}
+                  className="flex-shrink-0 p-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white transition-all active:scale-95 shadow-lg shadow-orange-500/50 touch-manipulation"
+                  title={language === 'hi' ? 'बंद करें' : 'Stop'}
+                  aria-label={language === 'hi' ? 'बोलना बंद करें' : 'Stop speaking'}
                 >
                   <VolumeX className="h-5 w-5" />
                 </button>
@@ -815,27 +828,30 @@ const ChatbotPage: React.FC = () => {
               <button
                 onClick={handleSendMessage}
                 disabled={!inputText.trim() || isLoading || isRecording}
-                className="bg-gradient-to-r from-green-600 to-blue-600 text-white p-3 sm:p-4 rounded-xl sm:rounded-2xl hover:from-green-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 active:scale-95 flex-shrink-0"
+                className="flex-shrink-0 bg-gradient-to-r from-green-600 to-blue-600 text-white p-3 rounded-xl hover:from-green-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 shadow-lg shadow-green-500/30 touch-manipulation"
+                aria-label={language === 'hi' ? 'भेजें' : 'Send'}
               >
                 <Send className="h-5 w-5" />
               </button>
             </div>
-            <div className="mt-2 sm:mt-3 text-xs text-gray-500 text-center flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
-              <span>{language === 'hi' ? 'AI जवाब 20 सेकंड में' : 'AI responds in 20s'}</span>
-              <span className="hidden sm:inline">•</span>
-              <span className="flex items-center space-x-1">
-                <span>📊</span>
-                <span>{language === 'hi' ? 'लाइव डेटा से' : 'With live data'}</span>
-              </span>
-              {DEEPGRAM_API_KEY && (
-                <>
-                  <span className="hidden sm:inline">•</span>
-                  <span className="flex items-center space-x-1">
-                    <span>🎤</span>
-                    <span>{language === 'hi' ? 'वॉइस सक्षम' : 'Voice enabled'}</span>
-                  </span>
-                </>
-              )}
+            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                <span className="font-medium">{language === 'hi' ? 'AI 20 सेकंड में जवाब' : 'AI responds in 20s'}</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="flex items-center gap-1">
+                  <span>📊</span>
+                  <span className="font-medium">{language === 'hi' ? 'लाइव डेटा' : 'Live data'}</span>
+                </span>
+                {DEEPGRAM_API_KEY && (
+                  <>
+                    <span className="hidden sm:inline">•</span>
+                    <span className="flex items-center gap-1">
+                      <span>🎤</span>
+                      <span className="font-medium">{language === 'hi' ? 'वॉइस' : 'Voice'}</span>
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
