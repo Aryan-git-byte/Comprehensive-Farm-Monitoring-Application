@@ -510,6 +510,63 @@ export class AiService {
       weatherContext = `\n\nCURRENT WEATHER CONDITIONS:\n${weatherEntries.join('\n')}`;
     }
 
+    // Regional context based on coordinates
+    let regionalContext = '';
+    if (farmData.locations.length > 0) {
+      const firstLocation = farmData.locations[0];
+      const lat = firstLocation.lat;
+      const lon = firstLocation.lon;
+      
+      let region = 'India';
+      let soilType = 'Mixed';
+      let climateZone = 'Tropical';
+      
+      // North India
+      if (lat >= 28 && lat <= 32 && lon >= 74 && lon <= 79) {
+        region = 'North India (Punjab/Haryana)';
+        soilType = 'Alluvial (alkaline tendency)';
+        climateZone = 'Sub-tropical, Winter fog common';
+      }
+      // Delhi/UP
+      else if (lat >= 25 && lat <= 30 && lon >= 77 && lon <= 83) {
+        region = 'North-Central India (Delhi/UP)';
+        soilType = 'Alluvial';
+        climateZone = 'Sub-tropical monsoon';
+      }
+      // Maharashtra
+      else if (lat >= 16 && lat <= 21 && lon >= 72 && lon <= 80) {
+        region = 'West India (Maharashtra)';
+        soilType = 'Black cotton soil (Vertisol)';
+        climateZone = 'Semi-arid to sub-humid';
+      }
+      // Karnataka/Tamil Nadu
+      else if (lat >= 10 && lat <= 16 && lon >= 75 && lon <= 80) {
+        region = 'South India (Karnataka/TN)';
+        soilType = 'Red/Laterite (acidic)';
+        climateZone = 'Tropical humid';
+      }
+      // West Bengal/Bihar
+      else if (lat >= 22 && lat <= 27 && lon >= 85 && lon <= 89) {
+        region = 'East India (WB/Bihar)';
+        soilType = 'Alluvial (high rainfall zone)';
+        climateZone = 'Humid subtropical';
+      }
+      // Gujarat
+      else if (lat >= 20 && lat <= 24 && lon >= 68 && lon <= 74) {
+        region = 'West India (Gujarat)';
+        soilType = 'Alluvial/Black';
+        climateZone = 'Semi-arid';
+      }
+      // Madhya Pradesh
+      else if (lat >= 21 && lat <= 26 && lon >= 74 && lon <= 82) {
+        region = 'Central India (MP)';
+        soilType = 'Black/Red';
+        climateZone = 'Sub-tropical';
+      }
+      
+      regionalContext = `\n\nREGIONAL CONTEXT:\nRegion: ${region}\nTypical Soil Type: ${soilType}\nClimate Zone: ${climateZone}\nCoordinates: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    }
+
     let farmerContext = '';
     if (session.context) {
       const profile = [];
@@ -546,7 +603,7 @@ export class AiService {
 Query Type: ${context.type}
 Urgency Level: ${context.urgency}
 Is Follow-up: ${context.conversationContext?.isFollowUp ? 'Yes' : 'No'}
-Language: ${isHindi ? 'Hindi' : 'English'}${conversationHistory}${farmerContext}${sensorContext}${weatherContext}${alertsContext}${issuesContext}${recommendationsContext}
+Language: ${isHindi ? 'Hindi' : 'English'}${conversationHistory}${farmerContext}${regionalContext}${sensorContext}${weatherContext}${alertsContext}${issuesContext}${recommendationsContext}
 
 CRITICAL INSTRUCTIONS:
 ${isHindi ? '⚠️ महत्वपूर्ण: यदि ऊपर सेंसर डेटा दिया गया है, तो आपको अपनी सलाह में उन विशिष्ट मूल्यों का उल्लेख करना चाहिए। उदाहरण: "आपकी मिट्टी की नमी 45% है" या "तापमान 28°C है"।' : '⚠️ IMPORTANT: If sensor data is provided above, you MUST mention those specific values in your advice. Example: "Your soil moisture is at 45%" or "Temperature is 28°C".'}
@@ -562,6 +619,18 @@ RESPONSE GUIDELINES:
 - Use emojis to make the advice more readable and engaging
 - Structure your response clearly with sections
 
+MANDATORY ELEMENTS TO INCLUDE:
+1. ALWAYS ask about crop growth stage if not provided (seedling/vegetative/flowering/fruiting)
+2. ALWAYS specify numerical thresholds: "Irrigate when soil moisture drops below 40%"
+3. ALWAYS mention specific fertilizer products: "Apply Urea 46-0-0 at 60 kg/ha"
+4. ALWAYS provide cost-benefit: "60kg Urea costs ₹360-420, expected yield gain 2-3 quintals worth ₹1000-1500"
+5. ALWAYS recommend irrigation method: "Drip irrigation saves 50% water" or "Sprinkler suitable for this crop"
+6. ALWAYS consider regional factors: "In your North Indian climate..." or "Black soils common in Maharashtra..."
+7. ALWAYS suggest pest/disease monitoring: "Check for yellowing (nitrogen deficiency) or leaf spots (fungal disease)"
+8. ALWAYS mention crop rotation if relevant: "After harvest, grow legumes to restore nitrogen"
+9. NEVER give contradictory advice: Review your response for consistency
+10. ALWAYS cite reference ranges from ICAR/agricultural universities when possible
+
 CRITICAL SAFETY RULES FOR FERTILIZER RECOMMENDATIONS:
 1. NEVER provide specific fertilizer doses (kg/ha) without knowing the crop growth stage
 2. If Nitrogen > 100 mg/kg, say "Nitrogen is adequate - monitor growth; only add if deficiency observed"
@@ -574,12 +643,76 @@ CRITICAL SAFETY RULES FOR FERTILIZER RECOMMENDATIONS:
 9. Use ranges (e.g., "80-120 kg/ha total for season") rather than exact doses
 10. If crop type or critical data is missing, say "Please provide [missing info] before I can recommend specific actions"
 
-INTERPRETATION GUIDELINES:
-- Soil Nitrogen (mg/kg): <80=Low, 80-120=Adequate, >120=High
-- Soil Phosphorus (mg/kg): <30=Low, 30-50=Adequate, >50=High  
-- Soil Potassium (mg/kg): <120=Low, 120-180=Adequate, >180=High
-- Soil pH: 6.0-7.5=Optimal for most crops
-- Soil Moisture (%): depends on soil type, generally 30-60% is workable range
+SPECIFIC FERTILIZER PRODUCTS TO RECOMMEND (Indian Context):
+- Nitrogen: Urea (46-0-0), Ammonium Sulfate (20-0-0), DAP (18-46-0)
+- Phosphorus: Single Super Phosphate (SSP 16% P2O5), DAP (18-46-0)
+- Potassium: Muriate of Potash (MOP 60% K2O), Sulphate of Potash (SOP 50% K2O)
+- Complex: NPK 19:19:19, NPK 20:20:0, NPK 12:32:16
+- Micro: Zinc Sulfate (ZnSO4), Ferrous Sulfate (FeSO4), Borax
+
+INTERPRETATION GUIDELINES WITH REFERENCES:
+- Soil Nitrogen (mg/kg): <80=Low, 80-120=Adequate, >120=High [Source: ICAR-IISS Nutrient Guidelines]
+- Soil Phosphorus (mg/kg): <11=Low, 11-22=Medium, 23-56=High, >56=Very High [Olsen Method]
+- Soil Potassium (mg/kg): <110=Low, 110-280=Medium, >280=High [Ammonium Acetate Method]
+- Soil pH: 6.0-7.5=Optimal for most crops, <5.5=Acidic (needs lime), >8.0=Alkaline (needs gypsum)
+- Soil Moisture for Wheat: 50-70%=Optimal, <40%=Irrigate immediately, >80%=Excess (drainage needed)
+- Soil Moisture for Rice: 80-100%=Optimal (flooded), 60-80%=Adequate, <50%=Stress
+- Soil Moisture for Vegetables: 60-80%=Optimal, <50%=Irrigate, >85%=Root rot risk
+- Soil Moisture for Millets: 40-60%=Optimal (drought tolerant), <35%=Stress
+
+CROP GROWTH STAGE REQUIREMENTS:
+WHEAT:
+- Tillering (20-30 DAS): N 40-50 kg/ha, P 20-30 kg/ha, K 20-30 kg/ha
+- Jointing (45-55 DAS): N 30-40 kg/ha (top dress)
+- Booting/Flowering (65-75 DAS): N 20-30 kg/ha (foliar spray if needed)
+- Optimal Moisture: 60-70%, Irrigate at CRI (21 DAS), Tillering (40 DAS), Jointing (60 DAS), Flowering (80 DAS)
+
+RICE:
+- Transplanting: N 50 kg/ha, P 40 kg/ha, K 40 kg/ha (basal)
+- Tillering (21-28 DAT): N 40 kg/ha (top dress)
+- Panicle Initiation (42-49 DAT): N 30 kg/ha (top dress)
+- Optimal Moisture: Keep flooded 2-5 cm water until milk stage
+
+TOMATO:
+- Vegetative (0-30 DAT): N 30 kg/ha, P 25 kg/ha, K 25 kg/ha
+- Flowering (30-60 DAT): N 40 kg/ha, K 40 kg/ha (increase potassium)
+- Fruiting (60-120 DAT): N 50 kg/ha, K 60 kg/ha (high potassium for fruit quality)
+- Optimal Moisture: 65-75%, avoid waterlogging
+
+IRRIGATION METHOD RECOMMENDATIONS:
+- Drip Irrigation: Best for tomato, potato, cotton, sugarcane - 40-60% water saving, better WUE
+- Sprinkler: Suitable for wheat, vegetables, orchards - 30-40% water saving
+- Flood/Border: Traditional for rice, sugarcane - water intensive but proven
+- Furrow: Good for row crops like maize, cotton - moderate water use
+
+PEST & DISEASE IDENTIFICATION:
+Common symptoms to ask about:
+- Yellow leaves with green veins = Iron/Zinc deficiency or Nitrogen excess
+- Brown leaf tips = Potassium deficiency or salt stress
+- Wilting despite moist soil = Root rot (Fusarium/Pythium) or vascular wilt
+- White powdery coating = Powdery mildew (use Sulfur 3g/L or Carbendazim 1g/L)
+- Brown/black spots = Leaf spot disease (use Mancozeb 2.5g/L)
+- Holes in leaves = Insect damage (identify: caterpillars, beetles, grasshoppers)
+
+REGIONAL AGROCLIMATIC CONSIDERATIONS:
+- North India (Punjab, Haryana, UP): High wheat-rice intensity, alkaline soils, winter fog
+- South India (TN, AP, Karnataka): Rice-pulse rotation, acidic soils, double cropping
+- West India (Gujarat, Maharashtra): Cotton-wheat, black soils, erratic rainfall
+- East India (WB, Bihar, Odisha): Rice-pulse, high rainfall, acidic soils
+- Central India (MP, Chhattisgarh): Soybean-wheat, medium black soils, rainfed
+
+CROP ROTATION & COMPANION PLANTING:
+- After Wheat: Mung bean, Cowpea (legumes fix nitrogen)
+- After Rice: Mustard, Chickpea (break pest cycle)
+- After Cotton: Wheat, Sorghum (replenish soil)
+- Companion: Marigold with vegetables (pest repellent), Mustard as trap crop
+
+ECONOMIC CONSIDERATIONS:
+- Cost-Benefit Analysis: Always mention input cost vs. expected yield increase
+- Urea (₹6-7/kg), DAP (₹27-30/kg), MOP (₹20-23/kg)
+- Example: "60 kg/ha Urea costs ₹360-420, expected yield increase 2-3 quintals (₹1000-1500 value)"
+- Prioritize: Nitrogen > Phosphorus > Potassium based on deficiency severity
+- Organic alternatives: FYM 5-10 tons/ha (cheaper but slower release)
 
 FORMAT YOUR RESPONSE:
 ${isHindi ? '⚠️ महत्वपूर्ण: केवल प्रासंगिक अनुभागों को शामिल करें। यदि प्रश्न सरल है (जैसे "नमस्ते"), तो केवल मुख्य सलाह दें। सभी 5 अनुभागों का उपयोग केवल तभी करें जब वे वास्तव में लागू हों।' : '⚠️ IMPORTANT: Include ONLY relevant sections. If query is simple (e.g., "hello"), provide only main advice. Use all 5 sections ONLY when they truly apply.'}
@@ -1292,6 +1425,7 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
   ): Promise<BulkTestResult[]> {
     const results: BulkTestResult[] = [];
     
+    // Process one test at a time for smoother experience
     for (let i = 0; i < testCases.length; i++) {
       const testCase = testCases[i];
       const startTime = performance.now();
@@ -1339,12 +1473,16 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
         
         results.push(result);
         
+        // Call progress callback immediately after each test completes
         if (onProgress) {
           onProgress(i + 1, testCases.length, result);
         }
         
-        // Add small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Small delay between tests to avoid overwhelming the API
+        // Skip delay after last test
+        if (i < testCases.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
         
       } catch (error) {
         const errorResult: BulkTestResult = {
@@ -1363,6 +1501,11 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
         
         if (onProgress) {
           onProgress(i + 1, testCases.length, errorResult);
+        }
+        
+        // Small delay even after errors
+        if (i < testCases.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
     }
