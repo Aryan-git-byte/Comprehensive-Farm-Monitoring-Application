@@ -9,12 +9,19 @@ import IntegratedDashboard from './components/Dashboard/IntegratedDashboard';
 import SimpleManualEntry from './components/ManualEntry/SimpleManualEntry';
 import MobileOptimizedSettings from './components/Settings/MobileOptimizedSettings';
 import SimpleHelp from './components/Help/SimpleHelp';
+import TestAIPage from './components/Testing/TestAIPage';
 
 const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
 
   useEffect(() => {
+    // Check if accessing hidden test route
+    const path = window.location.pathname;
+    if (path === '/test-ai') {
+      setActiveTab('test-ai');
+    }
+
     // Initialize app
     const initializeApp = async () => {
       try {
@@ -52,6 +59,8 @@ const App: React.FC = () => {
         return <SimpleHelp />;
       case 'settings':
         return <MobileOptimizedSettings />;
+      case 'test-ai':
+        return <TestAIPage />;
       default:
         return <IntegratedDashboard />;
     }
@@ -62,11 +71,13 @@ const App: React.FC = () => {
       <LanguageProvider>
         <ThemeProvider>
           <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-            <SimpleNavigation 
-              activeTab={activeTab} 
-              onTabChange={setActiveTab}
-            />
-            <main className="py-6">
+            {activeTab !== 'test-ai' && (
+              <SimpleNavigation 
+                activeTab={activeTab} 
+                onTabChange={setActiveTab}
+              />
+            )}
+            <main className={activeTab === 'test-ai' ? '' : 'py-6'}>
               {renderContent()}
             </main>
           </div>

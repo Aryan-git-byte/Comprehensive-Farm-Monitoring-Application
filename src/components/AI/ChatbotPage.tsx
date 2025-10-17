@@ -41,6 +41,7 @@ const ChatbotPage: React.FC = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -234,13 +235,47 @@ const ChatbotPage: React.FC = () => {
     setIsLoading(true);
     setResponseStartTime(Date.now());
 
+    // Create a placeholder AI message that will be updated as chunks arrive
+    const aiMessageId = (Date.now() + 1).toString();
+    const initialAiMessage: Message = {
+      id: aiMessageId,
+      text: '',
+      sender: 'ai',
+      timestamp: new Date(),
+      intelligence_level: 'advanced'
+    };
+
+    setMessages(prev => [...prev, initialAiMessage]);
+    setIsStreaming(true);
+
     try {
-      const response = await AiService.processQuery(
+      let isFirstChunk = true;
+      
+      // Use the streaming API
+      const response = await AiService.processQueryStream(
         queryText,
-        currentConversationId,
+        (chunk: string) => {
+          // Turn off loading spinner on first chunk
+          if (isFirstChunk) {
+            setIsLoading(false);
+            isFirstChunk = false;
+          }
+          
+          // Update the AI message with each chunk
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === aiMessageId 
+                ? { ...msg, text: msg.text + chunk }
+                : msg
+            )
+          );
+        },
+        currentConversationId || undefined,
         currentUserId || undefined,
         language
       );
+
+      setIsStreaming(false);
 
       // Update conversation ID if this is a new conversation
       if (!currentConversationId && response.conversationId) {
@@ -256,27 +291,30 @@ const ChatbotPage: React.FC = () => {
         })));
       }
       
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: response.advice,
-        sender: 'ai',
-        timestamp: new Date(),
-        confidence: response.confidence,
-        responseTime: response.responseTime,
-        intelligence_level: response.intelligence_level,
-        sources: response.sources
-      };
-
-      setMessages(prev => [...prev, aiMessage]);
+      // Update the AI message with final metadata
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === aiMessageId 
+            ? {
+                ...msg,
+                confidence: response.confidence,
+                responseTime: response.responseTime,
+                intelligence_level: response.intelligence_level,
+                sources: response.sources
+              }
+            : msg
+        )
+      );
 
       // Auto-speak AI response if enabled
       if (autoSpeak) {
         speakWithChromeTTS(response.advice);
       }
     } catch (error) {
+      setIsStreaming(false);
       const responseTime = responseStartTime ? Date.now() - responseStartTime : 0;
       const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: aiMessageId,
         text: language === 'hi' 
           ? `⚠️ माफ करें, ${responseTime > 25000 ? 'जवाब देने में बहुत समय लग गया (25 सेकंड से अधिक)' : 'तकनीकी समस्या हो रही है'}। कृपया फिर कोशिश करें।`
           : `⚠️ Sorry, ${responseTime > 25000 ? 'response took too long (over 25 seconds)' : 'technical issue occurred'}. Please try again.`,
@@ -286,7 +324,11 @@ const ChatbotPage: React.FC = () => {
         responseTime,
         intelligence_level: 'instant'
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === aiMessageId ? errorMessage : msg
+        )
+      );
     } finally {
       setIsLoading(false);
       setResponseStartTime(null);
@@ -646,6 +688,14 @@ const ChatbotPage: React.FC = () => {
                     <div className="flex items-start justify-between">
                       <p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base break-words flex-1">
                         {formatMessageText(message.text)}
+                        {/* Show blinking cursor if this message is being streamed */}
+                        {message.sender === 'ai' && isStreaming && message.text === messages[messages.length - 1]?.text && (
+                          <span className="inline-block w-0.5 h-5 bg-green-500 ml-1 animate-pulse"></span>
+                        )}
+                        {/* Show loading dots if message is empty and streaming hasn't started */}
+                        {message.sender === 'ai' && !message.text && isLoading && (
+                          <span className="text-gray-400">●●●</span>
+                        )}
                       </p>
                       {message.sender === 'ai' && (
                         <button

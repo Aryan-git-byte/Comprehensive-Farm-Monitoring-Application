@@ -170,6 +170,84 @@ export class AiService {
     return response;
   }
 
+  // STREAMING PROCESSING METHOD WITH CONTEXT
+  static async processQueryStream(
+    query: string,
+    onChunk: (chunk: string) => void,
+    conversationId?: string,
+    userId?: string | null,
+    language: string = 'en'
+  ): Promise<AiResponse> {
+    const startTime = performance.now();
+
+    // 1. Get or create conversation session
+    const session = conversationId
+      ? await this.getConversationSession(conversationId)
+      : await this.createNewConversation(language);
+    
+    // 2. Analyze query with conversation context
+    const context = this.analyzeQueryWithContext(query, language, session);
+    
+    // 3. Fetch all farm data
+    const farmData = await this.getFarmData();
+    
+    // 4. Add user message to conversation
+    const userMessage: ConversationMessage = {
+      role: 'user',
+      content: query,
+      timestamp: new Date(),
+      metadata: {
+        sensorData: farmData.sensorData,
+        weatherData: Array.from(farmData.weatherDataMap.values()),
+        queryType: context.type,
+        urgency: context.urgency
+      }
+    };
+    session.messages.push(userMessage);
+    
+    // 5. Build comprehensive prompt with conversation history
+    const systemPrompt = this.buildSystemPrompt(language, context, farmData, session);
+    
+    // 6. Get AI response from OpenRouter with streaming
+    const aiResponse = await this.callOpenRouterAPIStream(systemPrompt, query, session, onChunk);
+    
+    // 7. Parse AI response for structured data
+    const parsedResponse = this.parseAiResponse(aiResponse);
+    
+    // 8. Add assistant message to conversation
+    const assistantMessage: ConversationMessage = {
+      role: 'assistant',
+      content: parsedResponse.advice,
+      timestamp: new Date(),
+      metadata: {
+        queryType: context.type,
+        urgency: context.urgency
+      }
+    };
+    session.messages.push(assistantMessage);
+    
+    // 9. Update session context based on conversation
+    await this.updateSessionContext(session, query, parsedResponse);
+    
+    // 10. Save conversation to database
+    await this.saveConversation(session);
+    
+    // 11. Format and return response
+    const response: AiResponse = {
+      ...parsedResponse,
+      conversationId: session.id,
+      confidence: 0.9,
+      sources: ['llama_3.3_70b', 'live_sensor_data', 'live_weather_data', 'conversation_context'],
+      responseTime: performance.now() - startTime,
+      intelligence_level: 'advanced'
+    };
+
+    // Log the query and response to Supabase
+    await this.logQuery(query, response, session.id);
+    
+    return response;
+  }
+
   // CONVERSATION SESSION MANAGEMENT
   private static async createNewConversation(language: string = 'en'): Promise<ConversationSession> {
     const sessionId = `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -382,9 +460,26 @@ export class AiService {
   ): string {
     const isHindi = language === 'hi';
     
+    // Translate season and time to Hindi if needed
+    const seasonTranslation: Record<string, string> = {
+      'summer': isHindi ? 'गर्मी' : 'summer',
+      'monsoon': isHindi ? 'मानसून' : 'monsoon',
+      'winter': isHindi ? 'सर्दी' : 'winter'
+    };
+    
+    const timeTranslation: Record<string, string> = {
+      'morning': isHindi ? 'सुबह' : 'morning',
+      'afternoon': isHindi ? 'दोपहर' : 'afternoon',
+      'evening': isHindi ? 'शाम' : 'evening',
+      'night': isHindi ? 'रात' : 'night'
+    };
+    
+    const seasonText = seasonTranslation[context.season] || context.season;
+    const timeText = timeTranslation[context.timeContext] || context.timeContext;
+    
     const systemPrompt = isHindi 
-      ? `आप एक भारतीय कृषि विशेषज्ञ हैं जो पूरी बातचीत का संदर्भ याद रखते हैं। ${context.season} के मौसम में ${context.timeContext} के समय के लिए व्यावहारिक और तकनीकी सलाह दें।`
-      : `You are an Indian agricultural expert with perfect conversation memory. Provide practical and technical advice for ${context.season} season during ${context.timeContext}.`;
+      ? `आप एक भारतीय कृषि विशेषज्ञ हैं। अभी ${seasonText} का मौसम है और ${timeText} का समय है। आपको किसान को नीचे दिए गए LIVE सेंसर डेटा और मौसम की जानकारी के आधार पर विशिष्ट सलाह देनी है।`
+      : `You are an Indian agricultural expert. It's currently ${seasonText} season and ${timeText} time. You must provide specific advice based on the LIVE sensor data and weather information provided below.`;
 
     let conversationHistory = '';
     const recentMessages = session.messages.slice(-this.MAX_CONTEXT_MESSAGES);
@@ -453,24 +548,50 @@ Urgency Level: ${context.urgency}
 Is Follow-up: ${context.conversationContext?.isFollowUp ? 'Yes' : 'No'}
 Language: ${isHindi ? 'Hindi' : 'English'}${conversationHistory}${farmerContext}${sensorContext}${weatherContext}${alertsContext}${issuesContext}${recommendationsContext}
 
-INSTRUCTIONS:
+CRITICAL INSTRUCTIONS:
+${isHindi ? '⚠️ महत्वपूर्ण: यदि ऊपर सेंसर डेटा दिया गया है, तो आपको अपनी सलाह में उन विशिष्ट मूल्यों का उल्लेख करना चाहिए। उदाहरण: "आपकी मिट्टी की नमी 45% है" या "तापमान 28°C है"।' : '⚠️ IMPORTANT: If sensor data is provided above, you MUST mention those specific values in your advice. Example: "Your soil moisture is at 45%" or "Temperature is 28°C".'}
+${isHindi ? '⚠️ यदि कोई सेंसर डेटा नहीं है, तो सीधे कहें "कृपया अपने खेत की स्थिति बताएं" और सामान्य सलाह न दें।' : '⚠️ If NO sensor data is available, directly say "Please provide your farm conditions" and do NOT give generic advice.'}
+
+RESPONSE GUIDELINES:
+- ${isHindi ? 'यदि किसान केवल "नमस्ते" या "हाय" कहता है और सेंसर डेटा उपलब्ध है, तो सेंसर डेटा का उपयोग करके खेत की वर्तमान स्थिति बताएं' : 'If farmer just says "hello" or "hi" and sensor data is available, proactively share the current farm conditions using the sensor data'}
+- ${isHindi ? 'हमेशा विशिष्ट संख्याओं का उपयोग करें जो ऊपर दिए गए डेटा से हैं' : 'Always use specific numbers from the data provided above'}
+- ${isHindi ? 'सामान्य सलाह न दें - डेटा-संचालित सिफारिशें दें' : 'Do not give generic advice - provide data-driven recommendations'}
 - Remember and reference the conversation history when relevant
-- If this is a follow-up question, connect your answer to previous discussions
-- Provide detailed, actionable advice based on real-time data and conversation context
 - Address critical alerts with highest priority
-- Consider the farmer's experience level and provide appropriate detail
-- Include specific recommendations with quantities, timing, and methods
-- Suggest follow-up questions or next steps when appropriate
 - Respond in ${isHindi ? 'Hindi' : 'English'} language
 - Use emojis to make the advice more readable and engaging
-- Structure your response clearly with sections when appropriate
+- Structure your response clearly with sections
 
-FORMAT YOUR RESPONSE AS:
-🌱 **Main Advice**: [Your detailed recommendation]
-⚡ **Immediate Actions**: [What to do right now]
-📅 **Next Steps**: [What to plan for coming days/weeks]
-❓ **Follow-up Questions**: [Questions to help farmer better, if any]
-🔗 **Related Topics**: [Other areas farmer might want to explore]`;
+CRITICAL SAFETY RULES FOR FERTILIZER RECOMMENDATIONS:
+1. NEVER provide specific fertilizer doses (kg/ha) without knowing the crop growth stage
+2. If Nitrogen > 100 mg/kg, say "Nitrogen is adequate - monitor growth; only add if deficiency observed"
+3. NEVER recommend more than 50 kg/ha nitrogen without explicit crop stage information
+4. For potassium > 150 mg/kg or phosphorus > 40 mg/kg, say "adequate - maintain current levels"
+5. NEVER contradict yourself (e.g., don't say N is high then recommend adding more N)
+6. Always clarify: "total seasonal amount" vs "per application" when mentioning fertilizer doses
+7. For repeated applications: specify total season budget AND individual application amounts separately
+8. Always recommend soil testing + local agricultural expert consultation before major fertilizer applications
+9. Use ranges (e.g., "80-120 kg/ha total for season") rather than exact doses
+10. If crop type or critical data is missing, say "Please provide [missing info] before I can recommend specific actions"
+
+INTERPRETATION GUIDELINES:
+- Soil Nitrogen (mg/kg): <80=Low, 80-120=Adequate, >120=High
+- Soil Phosphorus (mg/kg): <30=Low, 30-50=Adequate, >50=High  
+- Soil Potassium (mg/kg): <120=Low, 120-180=Adequate, >180=High
+- Soil pH: 6.0-7.5=Optimal for most crops
+- Soil Moisture (%): depends on soil type, generally 30-60% is workable range
+
+FORMAT YOUR RESPONSE:
+${isHindi ? '⚠️ महत्वपूर्ण: केवल प्रासंगिक अनुभागों को शामिल करें। यदि प्रश्न सरल है (जैसे "नमस्ते"), तो केवल मुख्य सलाह दें। सभी 5 अनुभागों का उपयोग केवल तभी करें जब वे वास्तव में लागू हों।' : '⚠️ IMPORTANT: Include ONLY relevant sections. If query is simple (e.g., "hello"), provide only main advice. Use all 5 sections ONLY when they truly apply.'}
+
+${isHindi ? '🌱 **मुख्य सलाह**: [विशिष्ट डेटा मूल्यों के साथ विस्तृत सिफारिश - जैसे "आपकी मिट्टी की नमी 45% है जो अच्छी है"] - हमेशा शामिल करें' : '🌱 **Main Advice**: [Detailed recommendation with specific data values - e.g., "Your soil moisture is at 45% which is good"] - Always include'}
+${isHindi ? '⚡ **तत्काल कार्रवाई**: [डेटा के आधार पर अभी क्या करें] - केवल तभी जब तत्काल कार्रवाई आवश्यक हो' : '⚡ **Immediate Actions**: [What to do right now based on the data] - Only if immediate action needed'}
+${isHindi ? '📅 **आगामी कदम**: [आने वाले दिनों/हफ्तों के लिए योजना] - केवल तभी जब दीर्घकालिक योजना प्रासंगिक हो' : '📅 **Next Steps**: [What to plan for coming days/weeks] - Only if long-term planning relevant'}
+${isHindi ? '❓ **अनुवर्ती प्रश्न**: [किसान की बेहतर मदद के लिए प्रश्न] - केवल तभी जब अधिक जानकारी की आवश्यकता हो' : '❓ **Follow-up Questions**: [Questions to help farmer better] - Only if more info needed'}
+${isHindi ? '🔗 **संबंधित विषय**: [अन्य क्षेत्र जिन्हें किसान देख सकता है] - केवल तभी जब प्रासंगिक विषय हों' : '🔗 **Related Topics**: [Other areas farmer might want to explore] - Only if relevant topics exist'}
+
+${isHindi ? 'उदाहरण - सरल अभिवादन के लिए: केवल 🌱 मुख्य सलाह का उपयोग करें और सेंसर डेटा साझा करें' : 'Example - For simple greeting: Use only 🌱 Main Advice and share sensor data'}
+${isHindi ? 'उदाहरण - जटिल समस्या के लिए: सभी प्रासंगिक अनुभागों का उपयोग करें' : 'Example - For complex problem: Use all relevant sections'}`;
   }
 
   // OPENROUTER API CALL
@@ -518,6 +639,102 @@ FORMAT YOUR RESPONSE AS:
     }
 
     return data.choices[0].message.content;
+  }
+
+  // OPENROUTER API CALL WITH STREAMING
+  private static async callOpenRouterAPIStream(
+    systemPrompt: string,
+    userQuery: string,
+    session: ConversationSession,
+    onChunk: (chunk: string) => void
+  ): Promise<string> {
+    const messages = [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: userQuery
+      }
+    ];
+
+    const requestBody = {
+      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      messages: messages,
+      stream: true // Enable streaming
+    };
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPEN_ROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': SITE_URL,
+        'X-Title': SITE_NAME
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+    }
+
+    // Read the stream
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('Failed to get response stream reader');
+    }
+
+    const decoder = new TextDecoder();
+    let fullResponse = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+
+        // Decode the chunk
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+        for (const line of lines) {
+          // OpenRouter sends data in the format "data: {...}"
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6); // Remove "data: " prefix
+            
+            if (data === '[DONE]') {
+              continue;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices?.[0]?.delta?.content;
+              
+              if (content) {
+                fullResponse += content;
+                onChunk(content); // Call the callback with the chunk
+              }
+            } catch (e) {
+              // Skip invalid JSON chunks
+              console.error('Error parsing streaming chunk:', e);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    if (!fullResponse) {
+      throw new Error('No content received from streaming response');
+    }
+
+    return fullResponse;
   }
 
   // PARSE AI RESPONSE FOR STRUCTURED DATA
@@ -1067,4 +1284,380 @@ FORMAT YOUR RESPONSE AS:
       }
     }
   }
+
+  // BULK TESTING METHODS
+  static async processBulkQueries(
+    testCases: BulkTestCase[],
+    onProgress?: (current: number, total: number, result: BulkTestResult) => void
+  ): Promise<BulkTestResult[]> {
+    const results: BulkTestResult[] = [];
+    
+    for (let i = 0; i < testCases.length; i++) {
+      const testCase = testCases[i];
+      const startTime = performance.now();
+      
+      try {
+        // Fetch weather data if location is provided
+        let weatherData: WeatherData | null = null;
+        if (testCase.latitude && testCase.longitude) {
+          try {
+            weatherData = await WeatherService.getCurrentWeather(
+              testCase.latitude,
+              testCase.longitude
+            );
+          } catch (weatherError) {
+            console.warn(`Failed to fetch weather for location ${testCase.latitude}, ${testCase.longitude}:`, weatherError);
+            // Continue without weather data
+          }
+        }
+        
+        // Build query from test case with weather data
+        const query = this.buildQueryFromTestCase(testCase, weatherData);
+        
+        // Process the query
+        const response = await this.processQuery(
+          query,
+          undefined,
+          undefined,
+          testCase.language || 'en'
+        );
+        
+        const result: BulkTestResult = {
+          id: testCase.id,
+          input: testCase,
+          query: query,
+          response: response.advice,
+          confidence: response.confidence,
+          responseTime: performance.now() - startTime,
+          timestamp: new Date().toISOString(),
+          status: 'success',
+          recommendations: response.recommendations,
+          followUpQuestions: response.followUpQuestions,
+          relatedTopics: response.relatedTopics,
+          weatherData: weatherData || undefined
+        };
+        
+        results.push(result);
+        
+        if (onProgress) {
+          onProgress(i + 1, testCases.length, result);
+        }
+        
+        // Add small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error) {
+        const errorResult: BulkTestResult = {
+          id: testCase.id,
+          input: testCase,
+          query: this.buildQueryFromTestCase(testCase, null),
+          response: '',
+          confidence: 0,
+          responseTime: performance.now() - startTime,
+          timestamp: new Date().toISOString(),
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
+        
+        results.push(errorResult);
+        
+        if (onProgress) {
+          onProgress(i + 1, testCases.length, errorResult);
+        }
+      }
+    }
+    
+    return results;
+  }
+
+  private static buildQueryFromTestCase(testCase: BulkTestCase, weatherData: WeatherData | null = null): string {
+    // CHECK FOR MISSING CRITICAL DATA
+    const missingFields: string[] = [];
+    const criticalFields = {
+      'latitude': testCase.latitude,
+      'longitude': testCase.longitude,
+      'soil pH': testCase.soilPH,
+      'soil moisture': testCase.soilMoisture,
+      'nitrogen': testCase.soilNitrogen,
+      'phosphorus': testCase.soilPhosphorus,
+      'potassium': testCase.soilPotassium,
+      'crop type': testCase.cropType
+    };
+    
+    for (const [fieldName, value] of Object.entries(criticalFields)) {
+      if (value === undefined || value === null || value === '') {
+        missingFields.push(fieldName);
+      }
+    }
+    
+    // If critical data is missing, add warning to query
+    let warningPrefix = '';
+    if (missingFields.length > 0) {
+      warningPrefix = `[CRITICAL: Missing data - ${missingFields.join(', ')}. Provide ONLY general advice with NO specific fertilizer doses or amounts. Request missing information.] `;
+    }
+    
+    const parts: string[] = [];
+    
+    if (testCase.latitude && testCase.longitude) {
+      parts.push(`Location: ${testCase.latitude}, ${testCase.longitude}`);
+    }
+    
+    if (testCase.soilMoisture !== undefined) {
+      parts.push(`Soil Moisture: ${testCase.soilMoisture}%`);
+    }
+    
+    if (testCase.soilPH !== undefined) {
+      parts.push(`Soil pH: ${testCase.soilPH}`);
+    }
+    
+    if (testCase.soilNitrogen !== undefined) {
+      parts.push(`Nitrogen: ${testCase.soilNitrogen} mg/kg`);
+    }
+    
+    if (testCase.soilPhosphorus !== undefined) {
+      parts.push(`Phosphorus: ${testCase.soilPhosphorus} mg/kg`);
+    }
+    
+    if (testCase.soilPotassium !== undefined) {
+      parts.push(`Potassium: ${testCase.soilPotassium} mg/kg`);
+    }
+    
+    // If weather data is fetched, use it; otherwise use manual temperature/humidity if provided
+    if (weatherData) {
+      parts.push(`Temperature: ${weatherData.temperature}°C`);
+      parts.push(`Humidity: ${weatherData.humidity}%`);
+      parts.push(`Weather: ${weatherData.weather_description}`);
+      parts.push(`Wind Speed: ${weatherData.wind_speed} km/h`);
+      if (weatherData.rainfall > 0) {
+        parts.push(`Rainfall: ${weatherData.rainfall}mm`);
+      }
+    } else {
+      // Fallback to manual temperature/humidity from CSV if no weather data
+      if (testCase.temperature !== undefined) {
+        parts.push(`Temperature: ${testCase.temperature}°C`);
+      }
+      
+      if (testCase.humidity !== undefined) {
+        parts.push(`Humidity: ${testCase.humidity}%`);
+      }
+    }
+    
+    if (testCase.cropType) {
+      parts.push(`Crop: ${testCase.cropType}`);
+    }
+    
+    const dataString = parts.join(', ');
+    
+    const baseQuery = testCase.customQuery || 
+      (testCase.language === 'hi' 
+        ? 'इन मापदंडों के आधार पर खेती की सलाह दें' 
+        : 'Provide farming advice based on these parameters');
+    
+    // Add warning prefix if critical data is missing
+    return `${warningPrefix}${baseQuery}. ${dataString}`;
+  }
+
+  static async exportBulkResultsToCSV(results: BulkTestResult[]): Promise<string> {
+    const headers = [
+      'ID',
+      'Status',
+      'Latitude',
+      'Longitude',
+      'Soil Moisture (%)',
+      'Soil pH',
+      'Nitrogen (mg/kg)',
+      'Phosphorus (mg/kg)',
+      'Potassium (mg/kg)',
+      'Crop Type',
+      'Weather Temp (°C)',
+      'Weather Humidity (%)',
+      'Weather Condition',
+      'Weather Description',
+      'Wind Speed (km/h)',
+      'Rainfall (mm)',
+      'Query',
+      'AI Response',
+      'Confidence',
+      'Response Time (ms)',
+      'Immediate Actions',
+      'Next Steps',
+      'Follow-up Questions',
+      'Related Topics',
+      'Error',
+      'Timestamp'
+    ];
+    
+    const csvRows = [headers.join(',')];
+    
+    for (const result of results) {
+      const row = [
+        result.id,
+        result.status,
+        result.input.latitude || '',
+        result.input.longitude || '',
+        result.input.soilMoisture || '',
+        result.input.soilPH || '',
+        result.input.soilNitrogen || '',
+        result.input.soilPhosphorus || '',
+        result.input.soilPotassium || '',
+        result.input.cropType || '',
+        result.weatherData?.temperature || '',
+        result.weatherData?.humidity || '',
+        result.weatherData?.weather_condition || '',
+        result.weatherData?.weather_description || '',
+        result.weatherData?.wind_speed || '',
+        result.weatherData?.rainfall || '',
+        this.escapeCsvField(result.query),
+        this.escapeCsvField(result.response),
+        result.confidence,
+        Math.round(result.responseTime),
+        this.escapeCsvField(result.recommendations?.immediate.join('; ') || ''),
+        this.escapeCsvField(result.recommendations?.shortTerm.join('; ') || ''),
+        this.escapeCsvField(result.followUpQuestions?.join('; ') || ''),
+        this.escapeCsvField(result.relatedTopics?.join('; ') || ''),
+        this.escapeCsvField(result.error || ''),
+        result.timestamp
+      ];
+      
+      csvRows.push(row.join(','));
+    }
+    
+    return csvRows.join('\n');
+  }
+
+  static async exportBulkResultsToJSON(results: BulkTestResult[]): Promise<string> {
+    return JSON.stringify(results, null, 2);
+  }
+
+  private static escapeCsvField(field: string): string {
+    if (!field) return '';
+    const stringField = String(field);
+    if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+      return `"${stringField.replace(/"/g, '""')}"`;
+    }
+    return stringField;
+  }
+
+  static parseCsvToBulkTestCases(csvContent: string): BulkTestCase[] {
+    const lines = csvContent.trim().split('\n');
+    if (lines.length < 2) {
+      throw new Error('CSV must have at least a header row and one data row');
+    }
+    
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const testCases: BulkTestCase[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = this.parseCsvLine(lines[i]);
+      const testCase: BulkTestCase = {
+        id: String(i),
+        language: 'en'
+      };
+      
+      headers.forEach((header, index) => {
+        const value = values[index]?.trim();
+        if (!value) return;
+        
+        // Use more specific matching to avoid conflicts
+        if (header === 'id' || header.includes('test_id')) {
+          testCase.id = value;
+        } else if (header.includes('lat') && !header.includes('long')) {
+          testCase.latitude = parseFloat(value);
+        } else if (header.includes('lon') || header.includes('long')) {
+          testCase.longitude = parseFloat(value);
+        } else if (header.includes('moisture')) {
+          testCase.soilMoisture = parseFloat(value);
+        } else if ((header.includes('ph') || header.includes('pH')) && !header.includes('phos')) {
+          // Match 'ph' or 'pH' but NOT 'phosphorus'
+          testCase.soilPH = parseFloat(value);
+        } else if (header.includes('nitrogen') || header === 'n' || header === 'n_level') {
+          testCase.soilNitrogen = parseFloat(value);
+        } else if (header.includes('phosph') || header === 'p' || header === 'p_level') {
+          // Match 'phosphorus' or 'phosphate' but not just any 'p'
+          testCase.soilPhosphorus = parseFloat(value);
+        } else if (header.includes('potassium') || header === 'k' || header === 'k_level') {
+          testCase.soilPotassium = parseFloat(value);
+        } else if (header.includes('temp') && !header.includes('attempt')) {
+          testCase.temperature = parseFloat(value);
+        } else if (header.includes('humid')) {
+          testCase.humidity = parseFloat(value);
+        } else if (header.includes('crop')) {
+          testCase.cropType = value;
+        } else if (header.includes('query') || header.includes('question')) {
+          testCase.customQuery = value;
+        } else if (header.includes('lang')) {
+          testCase.language = value as 'en' | 'hi';
+        }
+      });
+      
+      testCases.push(testCase);
+    }
+    
+    return testCases;
+  }
+
+  private static parseCsvLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+      
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    result.push(current);
+    return result;
+  }
+}
+
+// Types for bulk testing
+export interface BulkTestCase {
+  id: string;
+  latitude?: number;
+  longitude?: number;
+  soilMoisture?: number;
+  soilPH?: number;
+  soilNitrogen?: number;
+  soilPhosphorus?: number;
+  soilPotassium?: number;
+  temperature?: number;
+  humidity?: number;
+  cropType?: string;
+  customQuery?: string;
+  language?: 'en' | 'hi';
+}
+
+export interface BulkTestResult {
+  id: string;
+  input: BulkTestCase;
+  query: string;
+  response: string;
+  confidence: number;
+  responseTime: number;
+  timestamp: string;
+  status: 'success' | 'error';
+  recommendations?: {
+    immediate: string[];
+    shortTerm: string[];
+    longTerm: string[];
+  };
+  followUpQuestions?: string[];
+  relatedTopics?: string[];
+  weatherData?: WeatherData;
+  error?: string;
 }
