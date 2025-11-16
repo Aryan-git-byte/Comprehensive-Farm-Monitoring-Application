@@ -113,10 +113,10 @@
       ]
     },
     {
-      "name": "Manual Entry",
-      "short_name": "Entry",
-      "description": "Add manual data",
-      "url": "/manual-entry",
+      "name": "Settings",
+      "short_name": "Settings",
+      "description": "Configure application preferences",
+      "url": "/settings",
       "icons": [
         {
           "src": "/icons/icon-96x96.png",
