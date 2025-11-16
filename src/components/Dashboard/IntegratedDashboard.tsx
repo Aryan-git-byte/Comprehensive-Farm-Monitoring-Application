@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Thermometer, AlertTriangle, CheckCircle, Clock, MapPin, TrendingUp, TrendingDown, Minus, BarChart2, WifiOff, X } from 'lucide-react';
+import { RefreshCw, Thermometer, AlertTriangle, CheckCircle, Clock, MapPin, TrendingUp, TrendingDown, Minus, BarChart2, WifiOff, X, Volume2 } from 'lucide-react';
+import { useTTS } from '../../hooks/useTTS';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { SensorService } from '../../services/sensorService';
+import { AiService } from '../../services/aiService';
 import { SensorData, ProcessedSensorReading } from '../../config/supabase';
 import StatusIndicator from '../Common/StatusIndicator';
 import LoadingSpinner from '../Common/LoadingSpinner';
@@ -10,6 +12,45 @@ import WeatherDashboard from './WeatherDashboard';
 
 const IntegratedDashboard: React.FC = () => {
   const { t, language } = useLanguage();
+  const { speak } = useTTS(language);
+
+  // Generate insights text for a sensor parameter (now AI-driven)
+  const getSensorInsightsText = async (reading: ProcessedSensorReading, trend: string) => {
+    const name = getSensorDisplayName(reading.sensor_type);
+    try {
+      const trendType = trend === 'up' ? 'up' : trend === 'down' ? 'down' : 'stable';
+      const insights = await AiService.getSensorInsights(
+        name,
+        reading.value,
+        reading.unit || '',
+        reading.status,
+        trendType,
+        language
+      );
+      return insights;
+    } catch (error) {
+      console.error('Failed to get AI insights, using fallback:', error);
+      // Fallback
+      if (language === 'hi') {
+        let text = `${name}: वर्तमान मान ${reading.value}${reading.unit ? ' ' + reading.unit : ''}.`;
+        if (trend === 'up') text += ' मान बढ़ रहा है.';
+        else if (trend === 'down') text += ' मान घट रहा है.';
+        else text += ' मान स्थिर है.';
+        return text;
+      } else {
+        let text = `${name}: Current value is ${reading.value}${reading.unit ? ' ' + reading.unit : ''}.`;
+        if (trend === 'up') text += ' Value is increasing.';
+        else if (trend === 'down') text += ' Value is decreasing.';
+        else text += ' Value is stable.';
+        return text;
+      }
+    }
+  };
+
+  const handleSpeakSensor = async (reading: ProcessedSensorReading, trend: string) => {
+    const insights = await getSensorInsightsText(reading, trend);
+    if (insights) speak(insights);
+  };
   const [sensorData, setSensorData] = useState<ProcessedSensorReading[]>([]);
   const [latestSensorReadings, setLatestSensorReadings] = useState<ProcessedSensorReading[]>([]);
   const [historicalData, setHistoricalData] = useState<Record<string, ProcessedSensorReading[]>>({});
@@ -208,13 +249,13 @@ const IntegratedDashboard: React.FC = () => {
 
   const getSensorDisplayName = (sensorType: string) => {
     const sensorNames: Record<string, string> = {
-      soil_moisture: t('soilMoisture'),
-      ph: t('soilHealth'),
-      soil_temperature: t('temperature'),
-      ec: 'EC',
-      n: 'Nitrogen',
-      p: 'Phosphorus',
-      k: 'Potassium'
+      soil_moisture: language === 'hi' ? 'मिट्टी की नमी' : t('soilMoisture'),
+      ph: language === 'hi' ? 'pH' : t('soilHealth'),
+      soil_temperature: language === 'hi' ? 'तापमान' : t('temperature'),
+      ec: language === 'hi' ? 'विद्युत चालकता (EC)' : 'EC',
+      n: language === 'hi' ? 'नाइट्रोजन' : 'Nitrogen',
+      p: language === 'hi' ? 'फास्फोरस' : 'Phosphorus',
+      k: language === 'hi' ? 'पोटेशियम' : 'Potassium'
     };
     return sensorNames[sensorType] || sensorType;
   };
@@ -439,8 +480,18 @@ const IntegratedDashboard: React.FC = () => {
                   onClick={() => setSelectedSensor(reading.sensor_type)}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-medium text-gray-900 dark:text-white">
+                    <h3 className="font-medium text-gray-900 dark:text-white flex items-center">
                       {getSensorDisplayName(reading.sensor_type)}
+                      <button
+                        className="ml-2 flex items-center px-1 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                        title={language === 'hi' ? 'इस पैरामीटर की जानकारी सुनें' : 'Speak parameter insights'}
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleSpeakSensor(reading, trend);
+                        }}
+                      >
+                        <Volume2 className="h-4 w-4" />
+                      </button>
                     </h3>
                     <div className="flex items-center space-x-2">
                       <TrendIcon trend={trend} />

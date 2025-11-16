@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Cloud, Thermometer, Droplets, Wind, Eye, Calendar, AlertCircle, WifiOff, Sunrise, Sunset, CloudRain, CloudSnow, CloudDrizzle, Sun, CloudFog, Zap, History, TrendingUp, TrendingDown, X } from 'lucide-react';
+import { Cloud, Thermometer, Droplets, Wind, Eye, Calendar, AlertCircle, WifiOff, Sunrise, Sunset, CloudRain, CloudSnow, CloudDrizzle, Sun, CloudFog, Zap, History, TrendingUp, TrendingDown, X, Volume2 } from 'lucide-react';
+import { useTTS } from '../../hooks/useTTS';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { WeatherService, WeatherData, WeatherForecast } from '../../services/weatherService';
+import { AiService } from '../../services/aiService';
 import LoadingSpinner from '../Common/LoadingSpinner';
 
 interface WeatherDashboardProps {
@@ -19,6 +21,38 @@ interface HistoricalWeatherData extends Partial<WeatherData> {
 
 const WeatherDashboard: React.FC<WeatherDashboardProps> = ({ latitude, longitude }) => {
   const { t, language } = useLanguage();
+  const { speak } = useTTS(language);
+
+  // Generate weather insights text for TTS (now AI-driven)
+  const getWeatherInsightsText = async () => {
+    if (!currentWeather) return '';
+    const trend = calculateWeatherTrend();
+    try {
+      const insights = await AiService.getWeatherInsights(currentWeather, trend, language);
+      return insights;
+    } catch (error) {
+      console.error('Failed to get AI insights, using fallback:', error);
+      // Fallback
+      if (language === 'hi') {
+        let text = `मौसम की जानकारी: तापमान ${currentWeather.temperature} डिग्री सेल्सियस, आर्द्रता ${currentWeather.humidity} प्रतिशत, स्थिति: ${currentWeather.weather_description}.`;
+        if (trend === 'warming') text += ' तापमान बढ़ रहा है.';
+        else if (trend === 'cooling') text += ' तापमान घट रहा है.';
+        else text += ' तापमान स्थिर है.';
+        return text;
+      } else {
+        let text = `Weather update: Temperature is ${currentWeather.temperature}°C, humidity is ${currentWeather.humidity} percent, condition: ${currentWeather.weather_description}.`;
+        if (trend === 'warming') text += ' Temperature is rising.';
+        else if (trend === 'cooling') text += ' Temperature is falling.';
+        else text += ' Temperature is stable.';
+        return text;
+      }
+    }
+  };
+
+  const handleSpeakWeather = async () => {
+    const insights = await getWeatherInsightsText();
+    if (insights) speak(insights);
+  };
   const [currentWeather, setCurrentWeather] = useState<WeatherData | null>(null);
   const [forecast, setForecast] = useState<WeatherForecast[]>([]);
   const [historicalWeather, setHistoricalWeather] = useState<HistoricalWeatherData[]>([]);
@@ -211,7 +245,7 @@ const WeatherDashboard: React.FC<WeatherDashboardProps> = ({ latitude, longitude
   const trend = calculateWeatherTrend();
 
   return (
-    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-sm border border-blue-200 dark:border-gray-700 p-6">
+  <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-sm border border-blue-200 dark:border-gray-700 p-6">
       {/* Offline/Cached Banner */}
       {!isOnline && (
         <div className="mb-4 bg-orange-100 dark:bg-orange-900/30 border border-orange-300 dark:border-orange-700 rounded-xl p-3 flex items-center space-x-2">
@@ -232,10 +266,18 @@ const WeatherDashboard: React.FC<WeatherDashboardProps> = ({ latitude, longitude
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-3">
-          <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg">
+  <div className="flex items-center justify-between mb-6">
+  <div className="flex items-center space-x-3">
+          <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg flex items-center space-x-2">
             <Cloud className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <button
+              className="ml-2 flex items-center px-2 py-1 bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded hover:bg-blue-300 dark:hover:bg-blue-700 transition-colors"
+              title={language === 'hi' ? 'मौसम की जानकारी सुनें' : 'Speak weather insights'}
+              onClick={handleSpeakWeather}
+            >
+              <Volume2 className="h-4 w-4 mr-1" />
+              <span className="text-xs font-medium">{language === 'hi' ? 'सुनें' : 'Speak'}</span>
+            </button>
           </div>
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">

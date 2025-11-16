@@ -1899,6 +1899,107 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
     result.push(current);
     return result;
   }
+
+  /**
+   * Generate AI-driven insights for weather data
+   * Returns a concise, spoken-friendly insight about weather conditions
+   */
+  static async getWeatherInsights(
+    weatherData: WeatherData,
+    trend: 'warming' | 'cooling' | 'stable',
+    language: string = 'en'
+  ): Promise<string> {
+    try {
+      const systemPrompt = language === 'hi'
+        ? `आप एक कृषि सलाहकार हैं। मौसम की जानकारी को संक्षेप में बताएं (अधिकतम 2-3 वाक्य, बोलने के लिए उपयुक्त):
+तापमान: ${weatherData.temperature}°C
+आर्द्रता: ${weatherData.humidity}%
+स्थिति: ${weatherData.weather_description}
+रुझान: ${trend === 'warming' ? 'तापमान बढ़ रहा है' : trend === 'cooling' ? 'तापमान घट रहा है' : 'तापमान स्थिर है'}
+हवा की गति: ${weatherData.wind_speed} किमी/घंटा
+
+कृपया किसानों के लिए सरल हिंदी में मौसम की संक्षिप्त जानकारी और एक त्वरित सलाह दें।`
+        : `You are an agricultural advisor. Provide a brief weather summary (max 2-3 sentences, suitable for text-to-speech):
+Temperature: ${weatherData.temperature}°C
+Humidity: ${weatherData.humidity}%
+Condition: ${weatherData.weather_description}
+Trend: ${trend === 'warming' ? 'Temperature rising' : trend === 'cooling' ? 'Temperature falling' : 'Temperature stable'}
+Wind speed: ${weatherData.wind_speed} km/h
+
+Provide a concise weather summary and quick farming advice in simple language.`;
+
+      const userQuery = language === 'hi' 
+        ? 'मौसम की जानकारी बताएं।'
+        : 'Provide weather insights.';
+
+      // Create a temporary session for this quick query
+      const tempSession = await this.createNewConversation(language);
+      const response = await this.callOpenRouterAPI(systemPrompt, userQuery, tempSession);
+      return response.trim();
+    } catch (error) {
+      console.error('Error generating weather insights:', error);
+      // Fallback to simple template
+      if (language === 'hi') {
+        return `मौसम की जानकारी: तापमान ${weatherData.temperature}°C, आर्द्रता ${weatherData.humidity}%, स्थिति: ${weatherData.weather_description}. ${trend === 'warming' ? 'तापमान बढ़ रहा है।' : trend === 'cooling' ? 'तापमान घट रहा है।' : 'तापमान स्थिर है।'}`;
+      }
+      return `Weather update: Temperature ${weatherData.temperature}°C, humidity ${weatherData.humidity}%, condition: ${weatherData.weather_description}. ${trend === 'warming' ? 'Temperature rising.' : trend === 'cooling' ? 'Temperature falling.' : 'Temperature stable.'}`;
+    }
+  }
+
+  /**
+   * Generate AI-driven insights for sensor parameter
+   * Returns a concise, spoken-friendly insight about the parameter
+   */
+  static async getSensorInsights(
+    sensorName: string,
+    value: number,
+    unit: string,
+    status: 'optimal' | 'warning' | 'critical',
+    trend: 'up' | 'down' | 'stable',
+    language: string = 'en'
+  ): Promise<string> {
+    try {
+      const systemPrompt = language === 'hi'
+        ? `आप एक कृषि सलाहकार हैं। इस सेंसर डेटा को संक्षेप में बताएं (अधिकतम 2-3 वाक्य, बोलने के लिए उपयुक्त):
+पैरामीटर: ${sensorName}
+मान: ${value}${unit}
+स्थिति: ${status === 'optimal' ? 'अच्छा' : status === 'warning' ? 'सावधान' : 'खतरनाक'}
+रुझान: ${trend === 'up' ? 'बढ़ रहा है' : trend === 'down' ? 'घट रहा है' : 'स्थिर है'}
+
+कृपया किसानों के लिए सरल हिंदी में इस पैरामीटर की संक्षिप्त जानकारी और त्वरित सलाह दें।`
+        : `You are an agricultural advisor. Provide brief insights about this sensor reading (max 2-3 sentences, suitable for text-to-speech):
+Parameter: ${sensorName}
+Value: ${value}${unit}
+Status: ${status}
+Trend: ${trend === 'up' ? 'increasing' : trend === 'down' ? 'decreasing' : 'stable'}
+
+Provide a concise summary and quick farming advice in simple language.`;
+
+      const userQuery = language === 'hi'
+        ? `${sensorName} की जानकारी बताएं।`
+        : `Provide insights for ${sensorName}.`;
+
+      // Create a temporary session for this quick query
+      const tempSession = await this.createNewConversation(language);
+      const response = await this.callOpenRouterAPI(systemPrompt, userQuery, tempSession);
+      return response.trim();
+    } catch (error) {
+      console.error('Error generating sensor insights:', error);
+      // Fallback to simple template
+      if (language === 'hi') {
+        let text = `${sensorName}: वर्तमान मान ${value}${unit ? ' ' + unit : ''}.`;
+        if (trend === 'up') text += ' मान बढ़ रहा है.';
+        else if (trend === 'down') text += ' मान घट रहा है.';
+        else text += ' मान स्थिर है.';
+        return text;
+      }
+      let text = `${sensorName}: Current value is ${value}${unit ? ' ' + unit : ''}.`;
+      if (trend === 'up') text += ' Value is increasing.';
+      else if (trend === 'down') text += ' Value is decreasing.';
+      else text += ' Value is stable.';
+      return text;
+    }
+  }
 }
 
 // Types for bulk testing
