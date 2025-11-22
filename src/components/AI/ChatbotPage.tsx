@@ -46,6 +46,7 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false); // For loading indicator after release
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -113,6 +114,7 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
   }, [language, messages.length]);
 
   // Speech-to-Text using Deepgram
+  // Push-to-talk: Start recording on mouse/touch down
   const startRecording = async () => {
     if (!DEEPGRAM_API_KEY) {
       alert('Deepgram API key not configured. Please add REACT_APP_DEEPGRAM_API_KEY to your .env file');
@@ -133,7 +135,9 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setIsTranscribing(true); // Show loading after release
         await transcribeAudio(audioBlob);
+        setIsTranscribing(false);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -145,6 +149,7 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
     }
   };
 
+  // Push-to-talk: Stop recording on mouse/touch up/leave
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
@@ -786,8 +791,12 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
               {/* Voice Input Button */}
               {DEEPGRAM_API_KEY && (
                 <button
-                  onClick={isRecording ? stopRecording : startRecording}
-                  disabled={isLoading}
+                  onMouseDown={startRecording}
+                  onTouchStart={startRecording}
+                  onMouseUp={stopRecording}
+                  onMouseLeave={stopRecording}
+                  onTouchEnd={stopRecording}
+                  disabled={isLoading || isTranscribing}
                   className={`flex-shrink-0 p-3 rounded-xl transition-all active:scale-95 touch-manipulation ${
                     isRecording 
                       ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/50' 
@@ -796,7 +805,13 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
                   title={isRecording ? (language === 'hi' ? 'रुकें' : 'Stop') : (language === 'hi' ? 'बोलें' : 'Voice')}
                   aria-label={isRecording ? (language === 'hi' ? 'रुकें' : 'Stop recording') : (language === 'hi' ? 'बोलें' : 'Start voice input')}
                 >
-                  {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  {isTranscribing ? (
+                    <Loader className="h-5 w-5 animate-spin" />
+                  ) : isRecording ? (
+                    <MicOff className="h-5 w-5" />
+                  ) : (
+                    <Mic className="h-5 w-5" />
+                  )}
                 </button>
               )}
 
