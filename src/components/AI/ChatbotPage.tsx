@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader, MessageSquare, Menu, Plus, Trash2, Edit3, Search, X, Mic, MicOff, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
+import { Send, Bot, User, Loader, MessageSquare, Menu, Plus, Trash2, Edit3, Search, X, Mic, MicOff, Volume2, VolumeX, ArrowLeft, Loader2 } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { AiService } from '../../services/aiService';
 import { AuthService } from '../../services/authService';
@@ -43,10 +43,10 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
   
   // TTS & STT States
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false); // For loading indicator after release
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -114,7 +114,6 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
   }, [language, messages.length]);
 
   // Speech-to-Text using Deepgram
-  // Push-to-talk: Start recording on mouse/touch down
   const startRecording = async () => {
     if (!DEEPGRAM_API_KEY) {
       alert('Deepgram API key not configured. Please add REACT_APP_DEEPGRAM_API_KEY to your .env file');
@@ -135,9 +134,7 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        setIsTranscribing(true); // Show loading after release
         await transcribeAudio(audioBlob);
-        setIsTranscribing(false);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -149,11 +146,11 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
     }
   };
 
-  // Push-to-talk: Stop recording on mouse/touch up/leave
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      setIsTranscribing(true);
     }
   };
 
@@ -181,6 +178,8 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
     } catch (error) {
       console.error('Error transcribing audio:', error);
       alert('Transcription failed. Please check your API key and try again.');
+    } finally {
+      setIsTranscribing(false);
     }
   };
 
@@ -790,29 +789,57 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
             <div className="flex items-end gap-2">
               {/* Voice Input Button */}
               {DEEPGRAM_API_KEY && (
-                <button
-                  onMouseDown={startRecording}
-                  onTouchStart={startRecording}
-                  onMouseUp={stopRecording}
-                  onMouseLeave={stopRecording}
-                  onTouchEnd={stopRecording}
-                  disabled={isLoading || isTranscribing}
-                  className={`flex-shrink-0 p-3 rounded-xl transition-all active:scale-95 touch-manipulation ${
-                    isRecording 
-                      ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/50' 
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  } disabled:opacity-50 disabled:cursor-not-allowed ${isRecording ? 'animate-pulse' : ''}`}
-                  title={isRecording ? (language === 'hi' ? 'रुकें' : 'Stop') : (language === 'hi' ? 'बोलें' : 'Voice')}
-                  aria-label={isRecording ? (language === 'hi' ? 'रुकें' : 'Stop recording') : (language === 'hi' ? 'बोलें' : 'Start voice input')}
-                >
-                  {isTranscribing ? (
-                    <Loader className="h-5 w-5 animate-spin" />
-                  ) : isRecording ? (
-                    <MicOff className="h-5 w-5" />
-                  ) : (
-                    <Mic className="h-5 w-5" />
+                <div className="relative flex items-center">
+                  <button
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={isLoading || isTranscribing}
+                    className={`flex-shrink-0 p-3 rounded-xl transition-all active:scale-95 touch-manipulation ${
+                      isRecording
+                        ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/50'
+                        : isTranscribing
+                          ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/50'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    } disabled:opacity-50 disabled:cursor-not-allowed ${isRecording ? 'animate-pulse' : ''}`}
+                    title={
+                      isRecording
+                        ? (language === 'hi' ? 'रुकें' : 'Stop')
+                        : isTranscribing
+                          ? (language === 'hi' ? 'लिप्यंतरण...' : 'Transcribing...')
+                          : (language === 'hi' ? 'बोलें' : 'Voice')
+                    }
+                    aria-label={
+                      isRecording
+                        ? (language === 'hi' ? 'रुकें' : 'Stop recording')
+                        : isTranscribing
+                          ? (language === 'hi' ? 'लिप्यंतरण...' : 'Transcribing...')
+                          : (language === 'hi' ? 'बोलें' : 'Start voice input')
+                    }
+                  >
+                    {isRecording ? (
+                      <MicOff className="h-5 w-5" />
+                    ) : isTranscribing ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Mic className="h-5 w-5" />
+                    )}
+                  </button>
+                  {isRecording && (
+                    <div className="absolute left-full ml-3 flex items-center gap-1 select-none">
+                      <span className="inline-block w-3 h-3 rounded-full bg-red-500 animate-pulse" aria-hidden="true"></span>
+                      <span className="text-xs text-red-600 dark:text-red-400 font-semibold" role="status">
+                        {language === 'hi' ? 'सुन रहा है...' : 'Listening...'}
+                      </span>
+                    </div>
                   )}
-                </button>
+                  {isTranscribing && !isRecording && (
+                    <div className="absolute left-full ml-3 flex items-center gap-1 select-none">
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-500" aria-hidden="true" />
+                      <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold" role="status">
+                        {language === 'hi' ? 'लिप्यंतरण...' : 'Transcribing...'}
+                      </span>
+                    </div>
+                  )}
+                </div>
               )}
 
               <div className="flex-1 relative">
