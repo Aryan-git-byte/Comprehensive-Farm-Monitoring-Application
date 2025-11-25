@@ -9,10 +9,12 @@ import { SensorData, ProcessedSensorReading } from '../../config/supabase';
 import StatusIndicator from '../Common/StatusIndicator';
 import LoadingSpinner from '../Common/LoadingSpinner';
 import WeatherDashboard from './WeatherDashboard';
+import ThinkingOverlay from '../Common/ThinkingOverlay';
 
 const IntegratedDashboard: React.FC = () => {
   const { t, language } = useLanguage();
   const { speak } = useTTS(language);
+  const [isThinking, setIsThinking] = useState(false);
 
   // Generate insights text for a sensor parameter (now AI-driven)
   const getSensorInsightsText = async (reading: ProcessedSensorReading, trend: string) => {
@@ -48,8 +50,13 @@ const IntegratedDashboard: React.FC = () => {
   };
 
   const handleSpeakSensor = async (reading: ProcessedSensorReading, trend: string) => {
-    const insights = await getSensorInsightsText(reading, trend);
-    if (insights) speak(insights);
+    setIsThinking(true);
+    try {
+      const insights = await getSensorInsightsText(reading, trend);
+      if (insights) speak(insights);
+    } finally {
+      setIsThinking(false);
+    }
   };
   const [sensorData, setSensorData] = useState<ProcessedSensorReading[]>([]);
   const [latestSensorReadings, setLatestSensorReadings] = useState<ProcessedSensorReading[]>([]);
@@ -353,6 +360,8 @@ const IntegratedDashboard: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      <ThinkingOverlay isVisible={isThinking} />
+      
       {/* Offline Banner */}
       {!isOnline && (
         <div className="bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-200 dark:border-orange-800 rounded-2xl p-4 flex items-center space-x-3">

@@ -16,7 +16,6 @@ const SimpleNavigation: React.FC<SimpleNavigationProps> = ({ activeTab, onTabCha
     { id: 'dashboard', label: t('dashboard'), icon: Home },
     { id: 'manual-entry', label: t('manualEntry'), icon: BookOpen },
     { id: 'ai-chatbot', label: t('aiAssistant'), icon: MessageSquare },
-    { id: 'rag-ai', label: 'Smart AI', icon: Sparkles },
     { id: 'help', label: t('help'), icon: HelpCircle },
     { id: 'settings', label: t('settings'), icon: Settings }
   ];

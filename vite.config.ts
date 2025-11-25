@@ -129,4 +129,7 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  server: {
+    host: true,       // Allows LAN access (0.0.0.0)
+  },
 });
