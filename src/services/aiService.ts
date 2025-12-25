@@ -11,8 +11,6 @@ const GROQ_API_KEYS = [
   import.meta.env.VITE_GROQ_API_KEY_3,
 ].filter(key => key); // Filter out undefined/empty keys
 
-// const SITE_URL = 'https://yourfarm.app';
-// const SITE_NAME = 'Smart Farm Assistant';
 
 if (GROQ_API_KEYS.length === 0) {
   throw new Error('At least one Groq API key is required for AI responses');
