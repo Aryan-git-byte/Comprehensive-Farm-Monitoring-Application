@@ -10,7 +10,7 @@ import {
   OpenWeatherData,
   CropInfo
 } from './externalApiService';
-import { supabase } from '../config/supabase';
+// import { supabase } from '../config/supabase';
 import type { ProcessedSensorReading } from '../config/supabase';
 import { SensorService } from './sensorService';
 
@@ -76,19 +76,19 @@ export interface RagResponse {
 }
 
 // ============================================================================
-// OPENROUTER API CLIENT
+// GROQ API CLIENT
 // ============================================================================
 
-class OpenRouterClient {
+class GroqClient {
   private static readonly API_KEYS = [
-    import.meta.env.VITE_OPEN_ROUTER_API_KEY_1,
-    import.meta.env.VITE_OPEN_ROUTER_API_KEY_2,
-    import.meta.env.VITE_OPEN_ROUTER_API_KEY_3,
+    import.meta.env.VITE_GROQ_API_KEY_1,
+    import.meta.env.VITE_GROQ_API_KEY_2,
+    import.meta.env.VITE_GROQ_API_KEY_3,
   ].filter(key => key);
 
   private static currentKeyIndex = 0;
-  private static readonly BASE_URL = 'https://openrouter.ai/api/v1/chat/completions';
-  private static readonly MODEL = 'meta-llama/llama-3.3-70b-instruct';
+  private static readonly BASE_URL = 'https://api.groq.com/openai/v1/chat/completions';
+  private static readonly MODEL = 'llama-3.3-70b-versatile';
 
   /**
    * Call OpenRouter API with automatic fallback
@@ -99,7 +99,7 @@ class OpenRouterClient {
     maxTokens: number = 2000
   ): Promise<string> {
     if (this.API_KEYS.length === 0) {
-      throw new Error('No OpenRouter API keys configured');
+      throw new Error('No Groq API keys configured');
     }
 
     let lastError: Error | null = null;
@@ -113,9 +113,7 @@ class OpenRouterClient {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': window.location.origin,
-            'X-Title': 'Smart Farm Assistant'
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             model: this.MODEL,
@@ -127,7 +125,7 @@ class OpenRouterClient {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(`OpenRouter API error: ${response.status} - ${JSON.stringify(errorData)}`);
+          throw new Error(`Groq API error: ${response.status} - ${JSON.stringify(errorData)}`);
         }
 
         const data = await response.json();
@@ -184,7 +182,7 @@ ${location ? `User location: Lat ${location.latitude}, Lon ${location.longitude}
 Extract parameters and determine which APIs are needed. Return JSON only.`;
 
     try {
-      const response = await OpenRouterClient.callApi(
+      const response = await GroqClient.callApi(
         [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -439,7 +437,7 @@ Question: ${context.user_query}
 Answer:`;
 
     try {
-      const response = await OpenRouterClient.callApi(
+      const response = await GroqClient.callApi(
         [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }

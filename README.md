@@ -150,7 +150,7 @@ The **Comprehensive Farm Monitoring Application** is an advanced agricultural in
 │                     Services Layer (TypeScript)              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
 │  │  AI Service  │  │RAG Service   │  │Weather Service│     │
-│  │  (OpenRouter)│  │(Query Analyzer)│ │(OpenWeather) │     │
+│  │  (Groq AI)   │  │(Query Analyzer)│ │(OpenWeather) │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
 │  │Sensor Service│  │External APIs │  │Video Service │     │
@@ -161,7 +161,7 @@ The **Comprehensive Farm Monitoring Application** is an advanced agricultural in
 ┌─────────────────────────────────────────────────────────────┐
 │                     External APIs & Data Sources             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │OpenRouter AI │  │ OpenWeather  │  │  SoilGrids   │     │
+│  │   Groq AI    │  │ OpenWeather  │  │  SoilGrids   │     │
 │  │  (Llama 3.3) │  │     API      │  │  (ISRIC)     │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
@@ -199,8 +199,8 @@ User Query
 └─────────────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────────────┐
-│ RAG Responder (OpenRouter AI)              │
-│ Model: meta-llama/llama-3.3-70b-instruct   │
+│ RAG Responder (Groq AI)                    │
+│ Model: llama-3.3-70b-versatile             │
 │ - Generates contextual response             │
 │ - Provides actionable recommendations       │
 │ - Cites data sources                        │
@@ -302,16 +302,16 @@ Comprehensive-Farm-Monitoring-Application-main/
 
 ## 🔌 API Integrations
 
-### **1. OpenRouter AI (Primary AI Engine)**
-- **Model**: `meta-llama/llama-3.3-70b-instruct`
+### **1. Groq AI (Primary AI Engine)**
+- **Model**: `llama-3.3-70b-versatile`
 - **Purpose**: Generate intelligent farming advice, analyze queries, provide recommendations
 - **Features**:
   - Automatic API key fallback (supports up to 3 keys)
   - Streaming responses for real-time output
   - Context-aware conversations
   - Multi-language support
-- **Cost**: ~$0.50 per 100 queries
-- **Configuration**: `VITE_OPEN_ROUTER_API_KEY_1/2/3`
+- **Cost**: (Check Groq pricing)
+- **Configuration**: `VITE_GROQ_API_KEY_1/2/3`
 
 ### **2. OpenWeather API**
 - **Endpoint**: `https://api.openweathermap.org/data/2.5`
@@ -653,15 +653,15 @@ Create a `.env` file in the project root with the following variables:
 
 ```bash
 # ============================================================================
-# OPENROUTER API KEYS (Required)
+# GROQ API KEYS (Required)
 # ============================================================================
-# Get from: https://openrouter.ai
-# Model: meta-llama/llama-3.3-70b-instruct
+# Get from: https://console.groq.com/keys
+# Model: llama-3.3-70b-versatile
 # System supports up to 3 keys for automatic fallback
 
-VITE_OPEN_ROUTER_API_KEY_1=sk-or-v1-your-key-here
-VITE_OPEN_ROUTER_API_KEY_2=sk-or-v1-optional-fallback-key
-VITE_OPEN_ROUTER_API_KEY_3=sk-or-v1-optional-fallback-key-2
+VITE_GROQ_API_KEY_1=gsk-your-key-here
+VITE_GROQ_API_KEY_2=gsk-optional-fallback-key
+VITE_GROQ_API_KEY_3=gsk-optional-fallback-key-2
 
 # ============================================================================
 # OPENWEATHER API KEY (Required)
@@ -689,8 +689,8 @@ VITE_SITE_NAME=Smart Farm Assistant
 
 ### **Obtaining API Keys**
 
-#### **OpenRouter API Key**
-1. Visit [https://openrouter.ai](https://openrouter.ai)
+#### **Groq API Key**
+1. Visit [https://console.groq.com/keys](https://console.groq.com/keys)
 2. Sign up / Log in
 3. Navigate to API Keys section
 4. Create new API key

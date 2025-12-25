@@ -4,18 +4,18 @@ import { WeatherService, WeatherData } from './weatherService';
 import { RagService, QueryAnalyzer } from './ragService';
 import { EnhancedOpenWeatherService } from './externalApiService';
 
-// OpenRouter API Keys with fallback system
-const OPEN_ROUTER_API_KEYS = [
-  import.meta.env.VITE_OPEN_ROUTER_API_KEY_1,
-  import.meta.env.VITE_OPEN_ROUTER_API_KEY_2,
-  import.meta.env.VITE_OPEN_ROUTER_API_KEY_3,
+// Groq API Keys with fallback system
+const GROQ_API_KEYS = [
+  import.meta.env.VITE_GROQ_API_KEY_1,
+  import.meta.env.VITE_GROQ_API_KEY_2,
+  import.meta.env.VITE_GROQ_API_KEY_3,
 ].filter(key => key); // Filter out undefined/empty keys
 
-const SITE_URL = import.meta.env.VITE_SITE_URL || 'https://yourfarm.app';
-const SITE_NAME = import.meta.env.VITE_SITE_NAME || 'Smart Farm Assistant';
+// const SITE_URL = 'https://yourfarm.app';
+// const SITE_NAME = 'Smart Farm Assistant';
 
-if (OPEN_ROUTER_API_KEYS.length === 0) {
-  throw new Error('At least one OpenRouter API key is required for AI responses');
+if (GROQ_API_KEYS.length === 0) {
+  throw new Error('At least one Groq API key is required for AI responses');
 }
 
 // Enhanced conversation message structure
@@ -116,17 +116,17 @@ export class AiService {
       }
     }
     // Build enriched context object
-    const enrichedContext = {
-      query,
-      location: locationData,
-      weather: weatherData,
-      farmData,
-      masterPrompt: 'You are an advanced agricultural AI assistant. Use real-time data and provide factual, actionable advice.'
-    };
+    // const enrichedContext = {
+    //   query,
+    //   location: locationData,
+    //   weather: weatherData,
+    //   farmData,
+    //   masterPrompt: 'You are an advanced agricultural AI assistant. Use real-time data and provide factual, actionable advice.'
+    // };
 
     // 2. Pass enriched context to QueryAnalyzer
     // QueryAnalyzer expects (userQuery, location)
-    const analysis = await QueryAnalyzer.analyzeQuery(query, locationData);
+    // const analysis = await QueryAnalyzer.analyzeQuery(query, locationData);
 
     // 3. Pass QueryAnalyzer output to RAG pipeline
     // RagService.answerQuestion expects (userQuery, location)
@@ -144,13 +144,13 @@ export class AiService {
   }
   private static conversationCache = new Map<string, ConversationSession>();
   private static readonly MAX_CONTEXT_MESSAGES = 10;
-  private static readonly CONTEXT_RELEVANCE_THRESHOLD = 0.7;
+  // private static readonly CONTEXT_RELEVANCE_THRESHOLD = 0.7; // Unused
 
   // MAIN PROCESSING METHOD WITH CONTEXT
   static async processQuery(
     query: string,
     conversationId?: string,
-    userId?: string | null,
+    _userId?: string | null,
     language: string = 'en'
   ): Promise<AiResponse> {
     const startTime = performance.now();
@@ -183,8 +183,8 @@ export class AiService {
     // 5. Build comprehensive prompt with conversation history
     const systemPrompt = this.buildSystemPrompt(language, context, farmData, session);
     
-    // 6. Get AI response from OpenRouter
-    const aiResponse = await this.callOpenRouterAPI(systemPrompt, query, session);
+    // 6. Get AI response from Groq
+    const aiResponse = await this.callGroqAPI(systemPrompt, query, session);
     
     // 7. Parse AI response for structured data
     const parsedResponse = this.parseAiResponse(aiResponse);
@@ -212,7 +212,7 @@ export class AiService {
       ...parsedResponse,
       conversationId: session.id,
       confidence: 0.9,
-      sources: ['llama_3.3_70b', 'live_sensor_data', 'live_weather_data', 'conversation_context'],
+      sources: ['groq/llama-3.3-70b-versatile', 'live_sensor_data', 'live_weather_data', 'conversation_context'],
       responseTime: performance.now() - startTime,
       intelligence_level: 'advanced'
     };
@@ -228,7 +228,7 @@ export class AiService {
     query: string,
     onChunk: (chunk: string) => void,
     conversationId?: string,
-    userId?: string | null,
+    _userId?: string | null,
     language: string = 'en'
   ): Promise<AiResponse> {
     const startTime = performance.now();
@@ -261,8 +261,8 @@ export class AiService {
     // 5. Build comprehensive prompt with conversation history
     const systemPrompt = this.buildSystemPrompt(language, context, farmData, session);
     
-    // 6. Get AI response from OpenRouter with streaming
-    const aiResponse = await this.callOpenRouterAPIStream(systemPrompt, query, session, onChunk);
+    // 6. Get AI response from Groq with streaming
+    const aiResponse = await this.callGroqAPIStream(systemPrompt, query, session, onChunk);
     
     // 7. Parse AI response for structured data
     const parsedResponse = this.parseAiResponse(aiResponse);
@@ -290,7 +290,7 @@ export class AiService {
       ...parsedResponse,
       conversationId: session.id,
       confidence: 0.9,
-      sources: ['llama_3.3_70b', 'live_sensor_data', 'live_weather_data', 'conversation_context'],
+      sources: ['groq/llama-3.3-70b-versatile', 'live_sensor_data', 'live_weather_data', 'conversation_context'],
       responseTime: performance.now() - startTime,
       intelligence_level: 'advanced'
     };
@@ -782,8 +782,8 @@ ${isHindi ? 'उदाहरण - सरल अभिवादन के लि�
 ${isHindi ? 'उदाहरण - जटिल समस्या के लिए: सभी प्रासंगिक अनुभागों का उपयोग करें' : 'Example - For complex problem: Use all relevant sections'}`;
   }
 
-  // OPENROUTER API CALL WITH FALLBACK
-  private static async callOpenRouterAPI(
+  // GROQ API CALL WITH FALLBACK
+  private static async callGroqAPI(
     systemPrompt: string,
     userQuery: string,
     session: ConversationSession
@@ -814,39 +814,37 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
     });
 
     const requestBody = {
-      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      model: 'llama-3.3-70b-versatile',
       messages: messages
     };
 
     let lastError: Error | null = null;
 
     // Try each API key in sequence
-    for (let i = 0; i < OPEN_ROUTER_API_KEYS.length; i++) {
-      const apiKey = OPEN_ROUTER_API_KEYS[i];
+    for (let i = 0; i < GROQ_API_KEYS.length; i++) {
+      const apiKey = GROQ_API_KEYS[i];
       
       try {
-        console.log(`Attempting OpenRouter API call with key ${i + 1}/${OPEN_ROUTER_API_KEYS.length}`);
+        console.log(`Attempting Groq API call with key ${i + 1}/${GROQ_API_KEYS.length}`);
         
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': SITE_URL,
-            'X-Title': SITE_NAME
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+          throw new Error(`Groq API error: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
         
         if (!data.choices?.[0]?.message?.content) {
-          throw new Error('Invalid response from OpenRouter API');
+          throw new Error('Invalid response from Groq API');
         }
 
         console.log(`✓ Successfully connected with API key ${i + 1}`);
@@ -857,7 +855,7 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
         console.error(`✗ API key ${i + 1} failed:`, lastError.message);
         
         // If this is not the last key, continue to next one
-        if (i < OPEN_ROUTER_API_KEYS.length - 1) {
+        if (i < GROQ_API_KEYS.length - 1) {
           console.log(`Trying next API key...`);
           continue;
         }
@@ -865,11 +863,11 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
     }
 
     // If all keys failed, throw the last error
-    throw new Error(`All ${OPEN_ROUTER_API_KEYS.length} API keys failed. Last error: ${lastError?.message}`);
+    throw new Error(`All ${GROQ_API_KEYS.length} API keys failed. Last error: ${lastError?.message}`);
   }
 
-  // OPENROUTER API CALL WITH STREAMING AND FALLBACK
-  private static async callOpenRouterAPIStream(
+  // GROQ API CALL WITH STREAMING AND FALLBACK
+  private static async callGroqAPIStream(
     systemPrompt: string,
     userQuery: string,
     session: ConversationSession,
@@ -901,7 +899,7 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
     });
 
     const requestBody = {
-      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      model: 'llama-3.3-70b-versatile',
       messages: messages,
       stream: true // Enable streaming
     };
@@ -909,26 +907,24 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
     let lastError: Error | null = null;
 
     // Try each API key in sequence
-    for (let i = 0; i < OPEN_ROUTER_API_KEYS.length; i++) {
-      const apiKey = OPEN_ROUTER_API_KEYS[i];
+    for (let i = 0; i < GROQ_API_KEYS.length; i++) {
+      const apiKey = GROQ_API_KEYS[i];
       
       try {
-        console.log(`Attempting OpenRouter streaming API call with key ${i + 1}/${OPEN_ROUTER_API_KEYS.length}`);
+        console.log(`Attempting Groq streaming API call with key ${i + 1}/${GROQ_API_KEYS.length}`);
         
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': SITE_URL,
-            'X-Title': SITE_NAME
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+          throw new Error(`Groq API error: ${response.status} - ${errorText}`);
         }
 
         // Read the stream
@@ -953,7 +949,7 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
             const lines = chunk.split('\n').filter(line => line.trim() !== '');
 
             for (const line of lines) {
-              // OpenRouter sends data in the format "data: {...}"
+              // Groq sends data in the format "data: {...}"
               if (line.startsWith('data: ')) {
                 const data = line.slice(6); // Remove "data: " prefix
                 
@@ -992,7 +988,7 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
         console.error(`✗ Streaming API key ${i + 1} failed:`, lastError.message);
         
         // If this is not the last key, continue to next one
-        if (i < OPEN_ROUTER_API_KEYS.length - 1) {
+        if (i < GROQ_API_KEYS.length - 1) {
           console.log(`Trying next API key for streaming...`);
           continue;
         }
@@ -1000,7 +996,7 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
     }
 
     // If all keys failed, throw the last error
-    throw new Error(`All ${OPEN_ROUTER_API_KEYS.length} API keys failed for streaming. Last error: ${lastError?.message}`);
+    throw new Error(`All ${GROQ_API_KEYS.length} API keys failed for streaming. Last error: ${lastError?.message}`);
   }
 
   // PARSE AI RESPONSE FOR STRUCTURED DATA
@@ -1170,7 +1166,7 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
         sources: response.sources,
         intelligence_level: response.intelligence_level,
         status: 'success',
-        model_used: 'llama-3.3-70b-instruct',
+        model_used: 'llama-3.3-70b-versatile',
         user_feedback: null,
         conversation_id: conversationId
       };
@@ -1262,7 +1258,7 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
     }
   }
 
-  static async getUserConversations(userId?: string | null, limit: number = 20): Promise<ConversationSession[]> {
+  static async getUserConversations(_userId?: string | null, limit: number = 20): Promise<ConversationSession[]> {
     try {
       const { data, error } = await supabase
         .from('conversations')
@@ -1396,7 +1392,7 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
   }
 
   static async searchConversations(
-    userId: string | null,
+    _userId: string | null,
     searchQuery: string,
     limit: number = 10
   ): Promise<ConversationSession[]> {
@@ -1934,7 +1930,7 @@ Provide a concise weather summary and quick farming advice in simple language.`;
 
       // Create a temporary session for this quick query
       const tempSession = await this.createNewConversation(language);
-      const response = await this.callOpenRouterAPI(systemPrompt, userQuery, tempSession);
+      const response = await this.callGroqAPI(systemPrompt, userQuery, tempSession);
       return response.trim();
     } catch (error) {
       console.error('Error generating weather insights:', error);
@@ -1981,7 +1977,7 @@ Provide a concise summary and quick farming advice in simple language.`;
 
       // Create a temporary session for this quick query
       const tempSession = await this.createNewConversation(language);
-      const response = await this.callOpenRouterAPI(systemPrompt, userQuery, tempSession);
+      const response = await this.callGroqAPI(systemPrompt, userQuery, tempSession);
       return response.trim();
     } catch (error) {
       console.error('Error generating sensor insights:', error);
