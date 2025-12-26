@@ -1,3 +1,7 @@
 User-agent: *
 Allow: /
 
+# Sitemap is written to dist/ at build time when VITE_SITE_URL is set.
+# For static hosting that directly serves /public at dev-time, you can also add:
+# Sitemap: https://YOUR_DOMAIN/sitemap.xml
+

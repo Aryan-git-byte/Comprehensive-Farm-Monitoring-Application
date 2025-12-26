@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build; npm run seo:prerender; npm run seo:sitemap",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seo:sitemap": "node ./scripts/generate-sitemap.mjs",
+    "seo:prerender": "node ./scripts/prerender.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.2",
@@ -21,6 +23,7 @@
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-helmet-async": "^2.0.5",
     "recharts": "^3.4.1"
   },
   "devDependencies": {
