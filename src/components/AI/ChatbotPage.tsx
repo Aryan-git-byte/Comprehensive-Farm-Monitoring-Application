@@ -13,6 +13,7 @@ interface Message {
   responseTime?: number;
   intelligence_level?: 'instant' | 'smart' | 'advanced';
   sources?: string[];
+  eventBreakdown?: Array<{ label: string; ms: number; source: string }>;
 }
 
 interface Conversation {
@@ -36,25 +37,25 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
   const [showSidebar, setShowSidebar] = useState(false);
   const [userConversations, setUserConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  // Removed unused currentUserId state
   const [searchTerm, setSearchTerm] = useState('');
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
-  
   // TTS & STT States
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  // Expanded event breakdown for AI message
+  const [expandedEventIdx, setExpandedEventIdx] = useState<string | null>(null);
 
   // Get Deepgram API key from environment
   const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || '';
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -103,8 +104,8 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
       const welcomeMessage: Message = {
         id: '1',
         text: language === 'hi' 
-          ? '🌾 नमस्ते! मैं आपका उन्नत AI खेती सहायक हूं। मैं आपके सेंसर डेटा, मौसम की जानकारी, और मिट्टी के विश्लेषण का उपयोग करके 20 सेकंड में व्यक्तिगत सलाह देता हूं। आप मुझसे अपनी फसल, सिंचाई, पोषण या किसी भी खेती संबंधी सवाल पूछ सकते हैं।'
-          : '🌾 Hello! I\'m your advanced AI farming assistant. I provide personalized advice within 20 seconds using your sensor data, weather information, and soil analysis. Ask me about your crops, irrigation, nutrition, or any farming questions.',
+          ? '🌾 नमस्ते! मैं आपका उन्नत AI खेती सहायक हूं। मैं आपके सेंसर डेटा, मौसम की जानकारी, और मिट्टी के विश्लेषण का उपयोग करके 5 सेकंड में व्यक्तिगत सलाह देता हूं। आप मुझसे अपनी फसल, सिंचाई, पोषण या किसी भी खेती संबंधी सवाल पूछ सकते हैं।'
+          : '🌾 Hello! I\'m your advanced AI farming assistant. I provide personalized advice within 5 seconds using your sensor data, weather information, and soil analysis. Ask me about your crops, irrigation, nutrition, or any farming questions.',
         sender: 'ai',
         timestamp: new Date(),
         intelligence_level: 'advanced'
@@ -171,7 +172,6 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
 
       const data = await response.json();
       const transcript = data.results?.channels[0]?.alternatives[0]?.transcript || '';
-      
       if (transcript) {
         setInputText(transcript);
       }
@@ -229,20 +229,17 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || isLoading) return;
-
     const userMessage: Message = {
       id: Date.now().toString(),
       text: inputText,
       sender: 'user',
       timestamp: new Date()
     };
-
     setMessages(prev => [...prev, userMessage]);
     const queryText = inputText;
     setInputText('');
     setIsLoading(true);
     setResponseStartTime(Date.now());
-
     // Create a placeholder AI message that will be updated as chunks arrive
     const aiMessageId = (Date.now() + 1).toString();
     const initialAiMessage: Message = {
@@ -252,26 +249,32 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
       timestamp: new Date(),
       intelligence_level: 'advanced'
     };
-
     setMessages(prev => [...prev, initialAiMessage]);
     setIsStreaming(true);
-
     try {
-      // Use AiService with conversation context
-      const aiResponse = await AiService.processQuery(
+      // Use AiService with streaming
+      let streamedText = '';
+      const aiResponse = await AiService.processQueryStream(
         queryText,
+        (chunk) => {
+          streamedText += chunk;
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === aiMessageId
+                ? { ...msg, text: streamedText }
+                : msg
+            )
+          );
+        },
         currentConversationId || undefined,
         undefined,
         language
       );
-      
       setIsStreaming(false);
-
       // Update the conversation ID if this is a new conversation
       if (!currentConversationId && aiResponse.conversationId) {
         setCurrentConversationId(aiResponse.conversationId);
       }
-
       setMessages(prev =>
         prev.map(msg =>
           msg.id === aiMessageId
@@ -281,17 +284,16 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
                 confidence: aiResponse.confidence,
                 responseTime: aiResponse.responseTime,
                 intelligence_level: 'advanced',
-                sources: aiResponse.sources
+                sources: aiResponse.sources,
+                eventBreakdown: aiResponse.eventBreakdown
               }
             : msg
         )
       );
-
       // Auto-speak AI response if enabled
       if (autoSpeak) {
         speakWithChromeTTS(aiResponse.advice);
       }
-
       // Refresh conversation list to show new/updated conversation
       try {
         const conversations = await AiService.getUserConversations();
@@ -657,7 +659,7 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
                   </h1>
                   <div className="flex items-center gap-2">
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {language === 'hi' ? 'ऑनलाइन • <20 सेकंड' : 'Online • <20 seconds'}
+                      {language === 'hi' ? 'ऑनलाइन • <5 सेकंड' : 'Online • <5 seconds'}
                     </p>
                     {DEEPGRAM_API_KEY && <span className="text-sm">🎤</span>}
                   </div>
@@ -702,7 +704,11 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
                   }`}>
                     <div className="flex items-start justify-between gap-2">
                       <p className="whitespace-pre-wrap leading-relaxed text-sm break-words flex-1">
-                        {formatMessageText(message.text)}
+                        {typeof message.text === 'string'
+                          ? formatMessageText(message.text)
+                          : message.text && typeof message.text === 'object'
+                            ? <pre className="bg-gray-100 dark:bg-gray-800 rounded p-2 text-xs overflow-x-auto">{JSON.stringify(message.text, null, 2)}</pre>
+                            : null}
                         {/* Show blinking cursor if this message is being streamed */}
                         {message.sender === 'ai' && isStreaming && message.text === messages[messages.length - 1]?.text && (
                           <span className="inline-block w-0.5 h-4 bg-green-500 ml-1 animate-pulse"></span>
@@ -727,16 +733,32 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
                     {message.sender === 'ai' && (message.responseTime || message.confidence || message.sources) && (
                       <div className="flex flex-wrap items-center justify-between mt-3 pt-2 border-t border-gray-200 dark:border-gray-600 text-xs gap-2">
                         <div className="flex items-center flex-wrap gap-2 opacity-70">
+                          {/* Response time and event breakdown */}
                           {message.responseTime && (
-                            <span className="whitespace-nowrap font-medium">
+                            <span
+                              className="whitespace-nowrap font-medium cursor-pointer select-none"
+                              onClick={() => setExpandedEventIdx(expandedEventIdx === message.id ? null : message.id)}
+                              title="Show event breakdown"
+                            >
                               ⏱️ {(message.responseTime / 1000).toFixed(1)}s
                             </span>
                           )}
-                          {message.confidence && (
-                            <span className={`whitespace-nowrap font-medium ${getConfidenceColor(message.confidence)}`}>
-                              🎯 {Math.round(message.confidence * 100)}%
-                            </span>
+                          {/* Expandable event breakdown below time */}
+                          {message.responseTime && message.eventBreakdown && expandedEventIdx === message.id && (
+                            <div className="w-full mt-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-2 text-xs shadow border border-gray-200 dark:border-gray-700">
+                              <div className="font-semibold text-green-600 mb-1">Event Breakdown</div>
+                              <ul className="space-y-1">
+                                {message.eventBreakdown.map((ev, idx) => (
+                                  <li key={idx} className="flex justify-between">
+                                    <span>{ev.label}</span>
+                                    <span className="font-mono text-gray-700 dark:text-gray-300">{ev.ms} ms</span>
+                                    <span className="ml-2 text-blue-600 dark:text-blue-400">{ev.source}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           )}
+                          {/* Confidence percentage removed for cleaner UI */}
                           {message.intelligence_level && (
                             <span title={message.intelligence_level} className="whitespace-nowrap text-base">
                               {getIntelligenceIcon(message.intelligence_level)}
@@ -880,7 +902,7 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
             </div>
             <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
               <div className="flex flex-wrap items-center justify-center gap-1.5">
-                <span className="font-medium">{language === 'hi' ? 'AI 20 सेकंड में जवाब' : 'AI responds in 20s'}</span>
+                <span className="font-medium">{language === 'hi' ? 'AI 5 सेकंड में जवाब' : 'AI responds in 5s'}</span>
                 <span className="hidden sm:inline">•</span>
                 <span className="flex items-center gap-1">
                   <span>📊</span>
@@ -902,6 +924,6 @@ const ChatbotPage: React.FC<ChatbotPageProps> = ({ onNavigateBack }) => {
       </div>
     </div>
   );
-};
+}
 
 export default ChatbotPage;

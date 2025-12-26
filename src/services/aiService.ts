@@ -92,6 +92,7 @@ export interface AiResponse {
     longTerm: string[];
   };
   relatedTopics?: string[];
+  eventBreakdown?: Array<{ label: string; ms: number; source: string }>;
 }
 
 export class AiService {
@@ -152,18 +153,25 @@ export class AiService {
     language: string = 'en'
   ): Promise<AiResponse> {
     const startTime = performance.now();
+    const eventBreakdown: Array<{ label: string; ms: number; source: string }> = [];
 
     // 1. Get or create conversation session
+    const t0 = performance.now();
     const session = conversationId
       ? await this.getConversationSession(conversationId)
       : await this.createNewConversation(language);
-    
+    eventBreakdown.push({ label: 'Conversation', ms: Math.round(performance.now() - t0), source: 'supabase' });
+
     // 2. Analyze query with conversation context
+    const t1 = performance.now();
     const context = this.analyzeQueryWithContext(query, language, session);
-    
+    eventBreakdown.push({ label: 'Analyze Query', ms: Math.round(performance.now() - t1), source: 'internal' });
+
     // 3. Fetch all farm data
+    const t2 = performance.now();
     const farmData = await this.getFarmData();
-    
+    eventBreakdown.push({ label: 'Farm Data', ms: Math.round(performance.now() - t2), source: 'sensorService/weatherService' });
+
     // 4. Add user message to conversation
     const userMessage: ConversationMessage = {
       role: 'user',
@@ -177,16 +185,22 @@ export class AiService {
       }
     };
     session.messages.push(userMessage);
-    
+
     // 5. Build comprehensive prompt with conversation history
+    const t3 = performance.now();
     const systemPrompt = this.buildSystemPrompt(language, context, farmData, session);
-    
+    eventBreakdown.push({ label: 'Build Prompt', ms: Math.round(performance.now() - t3), source: 'internal' });
+
     // 6. Get AI response from Groq
+    const t4 = performance.now();
     const aiResponse = await this.callGroqAPI(systemPrompt, query, session);
-    
+    eventBreakdown.push({ label: 'Groq API', ms: Math.round(performance.now() - t4), source: 'groq' });
+
     // 7. Parse AI response for structured data
+    const t5 = performance.now();
     const parsedResponse = this.parseAiResponse(aiResponse);
-    
+    eventBreakdown.push({ label: 'Parse Response', ms: Math.round(performance.now() - t5), source: 'internal' });
+
     // 8. Add assistant message to conversation
     const assistantMessage: ConversationMessage = {
       role: 'assistant',
@@ -198,13 +212,17 @@ export class AiService {
       }
     };
     session.messages.push(assistantMessage);
-    
+
     // 9. Update session context based on conversation
+    const t6 = performance.now();
     await this.updateSessionContext(session, query, parsedResponse);
-    
+    eventBreakdown.push({ label: 'Update Context', ms: Math.round(performance.now() - t6), source: 'supabase' });
+
     // 10. Save conversation to database
+    const t7 = performance.now();
     await this.saveConversation(session);
-    
+    eventBreakdown.push({ label: 'Save Conversation', ms: Math.round(performance.now() - t7), source: 'supabase' });
+
     // 11. Format and return response
     const response: AiResponse = {
       ...parsedResponse,
@@ -212,12 +230,13 @@ export class AiService {
       confidence: 0.9,
       sources: ['groq/llama-3.3-70b-versatile', 'live_sensor_data', 'live_weather_data', 'conversation_context'],
       responseTime: performance.now() - startTime,
-      intelligence_level: 'advanced'
+      intelligence_level: 'advanced',
+      eventBreakdown
     };
 
     // Log the query and response to Supabase
     await this.logQuery(query, response, session.id);
-    
+
     return response;
   }
 
@@ -933,39 +952,40 @@ ${isHindi ? 'उदाहरण - जटिल समस्या के लि�
 
         const decoder = new TextDecoder();
         let fullResponse = '';
+        let buffer = '';
 
         try {
           while (true) {
             const { done, value } = await reader.read();
-            
-            if (done) {
-              break;
-            }
+            if (done) break;
 
             // Decode the chunk
             const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+            buffer += chunk;
+            const lines = buffer.split('\n').filter(line => line.trim() !== '');
+            buffer = '';
 
             for (const line of lines) {
               // Groq sends data in the format "data: {...}"
               if (line.startsWith('data: ')) {
                 const data = line.slice(6); // Remove "data: " prefix
-                
-                if (data === '[DONE]') {
-                  continue;
-                }
+                if (data === '[DONE]') continue;
 
-                try {
-                  const parsed = JSON.parse(data);
-                  const content = parsed.choices?.[0]?.delta?.content;
-                  
-                  if (content) {
-                    fullResponse += content;
-                    onChunk(content); // Call the callback with the chunk
+                // Try to parse only if it looks like a complete JSON object
+                if (data.startsWith('{') && data.endsWith('}')) {
+                  try {
+                    const parsed = JSON.parse(data);
+                    const content = parsed.choices?.[0]?.delta?.content;
+                    if (content) {
+                      fullResponse += content;
+                      onChunk(content); // Call the callback with the chunk
+                    }
+                  } catch (e) {
+                    // Suppress noisy error logs for expected streaming chunk errors
                   }
-                } catch (e) {
-                  // Skip invalid JSON chunks
-                  console.error('Error parsing streaming chunk:', e);
+                } else {
+                  // If not a complete JSON, buffer for next chunk
+                  buffer = line + '\n';
                 }
               }
             }
